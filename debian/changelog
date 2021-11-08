@@ -1,0 +1,5 @@
+trivy (0.20.2-1kaisen) kaisen-packages; urgency=medium
+
+  * First release for Kaisen Linux
+
+ -- Kevin Chevreuil - Kaisen <kaisen@kaisenlinux.org>  Mon, 08 Nov 2021 18:13:57 +0100

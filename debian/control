@@ -1,0 +1,19 @@
+Source: trivy
+Section: admin
+Priority: optional
+Maintainer: Kevin Chevreuil - Kaisen <kaisen@kaisenlinux.org>
+Build-Depends: debhelper-compat (= 13), dh-golang, golang-go (>= 1.16)
+Standards-Version: 4.6.0
+Homepage: https://aquasecurity.github.io/trivy
+Vcs-Browser: https://gitlab.com/kaisenlinux/packages/trivy
+Vcs-Git: https://gitlab.com/kaisenlinux/packages/trivy.git
+XS-Go-Import-Path: github.com/aquasecurity/trivy
+
+Package: trivy
+Architecture: amd64 i386 arm64
+Depends: ${shlibs:Depends},
+	 ${misc:Depends},
+	 golang-go (>= 1.16)
+Description: Vulnerabilities scanner for containers
+ Scanner for vulnerabilities in container images, file systems,
+ and Git repositories, as well as for configuration issues
