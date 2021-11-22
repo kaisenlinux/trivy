@@ -1,4 +1,4 @@
-VERSION := 0.20.2
+VERSION := $(shell git describe --tags)
 LDFLAGS=-ldflags "-s -w -X=main.version=$(VERSION)"
 
 GOPATH=$(shell go env GOPATH)
