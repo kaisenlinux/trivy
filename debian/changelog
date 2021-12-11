@@ -1,3 +1,9 @@
+trivy (0.21.2-1kaisen) kaisen-packages; urgency=medium
+
+  * Import 0.21.2 version
+
+ -- Kevin Chevreuil - Kaisen <kaisen@kaisenlinux.org>  Sat, 11 Dec 2021 12:21:26 +0100
+
 trivy (0.21.1-1kaisen) kaisen-packages; urgency=medium
 
   * Import 0.21.1 version
