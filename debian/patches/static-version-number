@@ -4,7 +4,7 @@ Author: Kevin Chevreuil - Kaisen <kaisen@kaisenlinux.org>
 +++ trivy-0.21.2/Makefile
 @@ -1,4 +1,4 @@
 -VERSION := $(shell git describe --tags)
-+VERSION := 0.22.0
++VERSION := 0.23.0
  LDFLAGS=-ldflags "-s -w -X=main.version=$(VERSION)"
  
  GOPATH=$(shell go env GOPATH)
