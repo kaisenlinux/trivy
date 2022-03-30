@@ -1,2 +1,3 @@
 trivy usr/bin
 contrib/*.tpl usr/share/trivy/templates/
+debian/trivy.png usr/share/pixmaps/
