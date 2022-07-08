@@ -4,8 +4,8 @@ import (
 	"github.com/urfave/cli/v2"
 	"golang.org/x/xerrors"
 
-	"github.com/aquasecurity/fanal/analyzer"
 	"github.com/aquasecurity/trivy/pkg/commands/option"
+	"github.com/aquasecurity/trivy/pkg/fanal/analyzer"
 )
 
 // Option holds the artifact options
@@ -21,6 +21,7 @@ type Option struct {
 	option.SbomOption
 	option.SecretOption
 	option.KubernetesOption
+	option.OtherOption
 
 	// We don't want to allow disabled analyzers to be passed by users,
 	// but it differs depending on scanning modes.
@@ -46,6 +47,7 @@ func NewOption(c *cli.Context) (Option, error) {
 		SbomOption:       option.NewSbomOption(c),
 		SecretOption:     option.NewSecretOption(c),
 		KubernetesOption: option.NewKubernetesOption(c),
+		OtherOption:      option.NewOtherOption(c),
 	}, nil
 }
 
