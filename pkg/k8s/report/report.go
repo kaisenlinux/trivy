@@ -5,6 +5,8 @@ import (
 	"io"
 	"strings"
 
+	"golang.org/x/exp/slices"
+
 	"golang.org/x/exp/maps"
 	"golang.org/x/xerrors"
 
@@ -12,6 +14,7 @@ import (
 	"github.com/aquasecurity/trivy-kubernetes/pkg/artifacts"
 	ftypes "github.com/aquasecurity/trivy/pkg/fanal/types"
 
+	"github.com/aquasecurity/trivy/pkg/log"
 	"github.com/aquasecurity/trivy/pkg/types"
 )
 
@@ -24,10 +27,11 @@ const (
 )
 
 type Option struct {
-	Format     string
-	Report     string
-	Output     io.Writer
-	Severities []dbTypes.Severity
+	Format        string
+	Report        string
+	Output        io.Writer
+	Severities    []dbTypes.Severity
+	ColumnHeading []string
 }
 
 // Report represents a kubernetes scan report
@@ -80,6 +84,10 @@ func (r Report) Failed() bool {
 	return false
 }
 
+func (r Report) empty() bool {
+	return len(r.Misconfigurations) == 0 && len(r.Vulnerabilities) == 0
+}
+
 func (r Report) consolidate() ConsolidatedReport {
 	consolidated := ConsolidatedReport{
 		SchemaVersion: r.SchemaVersion,
@@ -121,22 +129,71 @@ type Writer interface {
 }
 
 // Write writes the results in the give format
-func Write(report Report, option Option) error {
-	var writer Writer
+func Write(report Report, option Option, securityChecks []string, showEmpty bool) error {
+	report.printErrors()
+
 	switch option.Format {
 	case jsonFormat:
-		writer = &JSONWriter{Output: option.Output, Report: option.Report}
+		jwriter := JSONWriter{Output: option.Output, Report: option.Report}
+		return jwriter.Write(report)
 	case tableFormat:
-		writer = &TableWriter{
-			Output:     option.Output,
-			Report:     option.Report,
-			Severities: option.Severities,
+		workloadReport, rbacReport := separateMisConfigRoleAssessment(report, securityChecks)
+
+		if !workloadReport.empty() || showEmpty {
+			WorkloadWriter := &TableWriter{
+				Output:        option.Output,
+				Report:        option.Report,
+				Severities:    option.Severities,
+				ColumnHeading: ColumnHeading(securityChecks, WorkloadColumns()),
+			}
+			err := WorkloadWriter.Write(workloadReport)
+			if err != nil {
+				return err
+			}
 		}
+
+		if !rbacReport.empty() || showEmpty {
+			rbacWriter := &TableWriter{
+				Output:        option.Output,
+				Report:        option.Report,
+				Severities:    option.Severities,
+				ColumnHeading: ColumnHeading(securityChecks, RoleColumns()),
+			}
+			return rbacWriter.Write(rbacReport)
+		}
+
+		return nil
 	default:
 		return xerrors.Errorf(`unknown format %q. Use "json" or "table"`, option.Format)
 	}
+}
 
-	return writer.Write(report)
+func separateMisConfigRoleAssessment(k8sReport Report, securityChecks []string) (Report, Report) {
+	workloadMisconfig := make([]Resource, 0)
+	rbacAssessment := make([]Resource, 0)
+	for _, misConfig := range k8sReport.Misconfigurations {
+		if slices.Contains(securityChecks, types.SecurityCheckRbac) && rbacResource(misConfig) {
+			rbacAssessment = append(rbacAssessment, misConfig)
+		} else {
+			if slices.Contains(securityChecks, types.SecurityCheckConfig) && !rbacResource(misConfig) {
+				workloadMisconfig = append(workloadMisconfig, misConfig)
+			}
+		}
+	}
+	return Report{
+			SchemaVersion:     0,
+			ClusterName:       k8sReport.ClusterName,
+			Vulnerabilities:   k8sReport.Vulnerabilities,
+			Misconfigurations: workloadMisconfig,
+		}, Report{
+			SchemaVersion:     0,
+			ClusterName:       k8sReport.ClusterName,
+			Misconfigurations: rbacAssessment,
+		}
+}
+
+func rbacResource(misConfig Resource) bool {
+	return misConfig.Kind == "Role" || misConfig.Kind == "RoleBinding" || misConfig.Kind == "ClusterRole" || misConfig.Kind == "ClusterRoleBinding"
 }
 
 func CreateResource(artifact *artifacts.Artifact, report types.Report, err error) Resource {
@@ -165,4 +222,18 @@ func CreateResource(artifact *artifacts.Artifact, report types.Report, err error
 	}
 
 	return r
+}
+
+func (r Report) printErrors() {
+	for _, resource := range r.Vulnerabilities {
+		if resource.Error != "" {
+			log.Logger.Errorf("Error during vulnerabilities scan: %s", resource.Error)
+		}
+	}
+
+	for _, resource := range r.Misconfigurations {
+		if resource.Error != "" {
+			log.Logger.Errorf("Error during misconfiguration scan: %s", resource.Error)
+		}
+	}
 }
