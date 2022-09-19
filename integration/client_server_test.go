@@ -14,6 +14,7 @@ import (
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
 	"github.com/docker/go-connections/nat"
+	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	testcontainers "github.com/testcontainers/testcontainers-go"
@@ -35,6 +36,7 @@ type csArgs struct {
 	ClientTokenHeader string
 	ListAllPackages   bool
 	Target            string
+	secretConfig      string
 }
 
 func TestClientServer(t *testing.T) {
@@ -236,6 +238,16 @@ func TestClientServer(t *testing.T) {
 			},
 			golden: "testdata/pom.json.golden",
 		},
+		{
+			name: "scan sample.pem with fs command in client/server mode",
+			args: csArgs{
+				Command:          "fs",
+				RemoteAddrOption: "--server",
+				secretConfig:     "testdata/fixtures/fs/secrets/trivy-secret.yaml",
+				Target:           "testdata/fixtures/fs/secrets/",
+			},
+			golden: "testdata/secrets.json.golden",
+		},
 	}
 
 	addr, cacheDir := setup(t, setupOptions{})
@@ -243,6 +255,10 @@ func TestClientServer(t *testing.T) {
 	for _, c := range tests {
 		t.Run(c.name, func(t *testing.T) {
 			osArgs, outputFile := setupClient(t, c.args, addr, cacheDir, c.golden)
+
+			if c.args.secretConfig != "" {
+				osArgs = append(osArgs, "--secret-config", c.args.secretConfig)
+			}
 
 			//
 			err := execute(osArgs)
@@ -399,10 +415,10 @@ func TestClientServerWithCycloneDX(t *testing.T) {
 			err = json.NewDecoder(f).Decode(&got)
 			require.NoError(t, err)
 
-			assert.EqualValues(t, tt.wantComponentsCount, len(*got.Components))
-			assert.EqualValues(t, tt.wantDependenciesCount, len(*got.Dependencies))
+			assert.EqualValues(t, tt.wantComponentsCount, len(lo.FromPtr(got.Components)))
+			assert.EqualValues(t, tt.wantDependenciesCount, len(lo.FromPtr(got.Dependencies)))
 			for i, dep := range *got.Dependencies {
-				assert.EqualValues(t, tt.wantDependsOnCount[i], len(*dep.Dependencies))
+				assert.EqualValues(t, tt.wantDependsOnCount[i], len(lo.FromPtr(dep.Dependencies)))
 			}
 		})
 	}

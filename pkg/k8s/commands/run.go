@@ -26,7 +26,10 @@ const (
 
 // Run runs a k8s scan
 func Run(ctx context.Context, args []string, opts flag.Options) error {
-	cluster, err := k8s.GetCluster(opts.K8sOptions.ClusterContext)
+	cluster, err := k8s.GetCluster(
+		k8s.WithContext(opts.K8sOptions.ClusterContext),
+		k8s.WithKubeConfig(opts.K8sOptions.KubeConfig),
+	)
 	if err != nil {
 		return xerrors.Errorf("failed getting k8s cluster: %w", err)
 	}
@@ -90,8 +93,9 @@ func run(ctx context.Context, opts flag.Options, cluster string, artifacts []*ar
 // To show all the results, user needs to specify "--report all" explicitly
 // even though the default value of "--report" is "all".
 //
-// e.g. $ trivy k8s --report all cluster
-//      $ trivy k8s --report all all
+// e.g.
+// $ trivy k8s --report all cluster
+// $ trivy k8s --report all all
 //
 // Or they can use "--format json" with implicit "--report all".
 //

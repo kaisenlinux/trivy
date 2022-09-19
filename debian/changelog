@@ -1,3 +1,10 @@
+trivy (0.32.0-1kaisen) kaisen-packages; urgency=medium
+
+  * Import the 0.32.0 version
+  * Update quilt patch
+
+ -- Kevin Chevreuil - Kaisen <kaisen@kaisenlinux.org>  Mon, 19 Sep 2022 17:47:09 +0100
+
 trivy (0.30.4-1kaisen) kaisen-packages; urgency=medium
 
   * Import 0.30.4 version
