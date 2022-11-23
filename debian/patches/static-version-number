@@ -1,10 +1,10 @@
 Author: Kevin Chevreuil - Kaisen <kaisen@kaisenlinux.org>
 
---- trivy-0.32.0.orig/Makefile
-+++ trivy-0.32.0/Makefile
+--- trivy-0.34.0.orig/Makefile
++++ trivy-0.34.0/Makefile
 @@ -1,4 +1,4 @@
 -VERSION := $(patsubst v%,%,$(shell git describe --tags --always)) #Strips the v prefix from the tag
-+VERSION := 0.32.0
++VERSION := 0.34.0
  LDFLAGS := -ldflags "-s -w -X=main.version=$(VERSION)"
  
  GOPATH := $(shell go env GOPATH)

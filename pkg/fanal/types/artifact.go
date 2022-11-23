@@ -39,14 +39,25 @@ type Package struct {
 	Modularitylabel string     `json:",omitempty"` // only for Red Hat based distributions
 	BuildInfo       *BuildInfo `json:",omitempty"` // only for Red Hat
 
-	Ref       string   `json:",omitempty"` // identifier which can be used to reference the component elsewhere
-	Indirect  bool     `json:",omitempty"` // this package is direct dependency of the project or not
-	DependsOn []string `json:",omitempty"` // dependencies of this package
+	Ref      string `json:",omitempty"` // identifier which can be used to reference the component elsewhere
+	Indirect bool   `json:",omitempty"` // this package is direct dependency of the project or not
+
+	// Dependencies of this package
+	// Note:　it may have interdependencies, which may lead to infinite loops.
+	DependsOn []string `json:",omitempty"`
 
 	Layer Layer `json:",omitempty"`
 
 	// Each package metadata have the file path, while the package from lock files does not have.
 	FilePath string `json:",omitempty"`
+
+	// lines from the lock file where the dependency is written
+	Locations []Location `json:",omitempty"`
+}
+
+type Location struct {
+	StartLine int `json:",omitempty"`
+	EndLine   int `json:",omitempty"`
 }
 
 // BuildInfo represents information under /root/buildinfo in RHEL
@@ -202,8 +213,9 @@ type ArtifactDetail struct {
 // ToBlobInfo is used to store a merged layer in cache.
 func (a *ArtifactDetail) ToBlobInfo() BlobInfo {
 	return BlobInfo{
-		OS:         a.OS,
-		Repository: a.Repository,
+		SchemaVersion: BlobJSONSchemaVersion,
+		OS:            a.OS,
+		Repository:    a.Repository,
 		PackageInfos: []PackageInfo{
 			{
 				FilePath: "merged", // Set a dummy file path
