@@ -29,6 +29,8 @@ import (
 	_ "github.com/aquasecurity/trivy/pkg/fanal/handler/all"
 	"github.com/aquasecurity/trivy/pkg/fanal/image"
 	"github.com/aquasecurity/trivy/pkg/fanal/types"
+
+	_ "modernc.org/sqlite"
 )
 
 var update = flag.Bool("update", false, "update golden files")
@@ -47,56 +49,83 @@ var tests = []testCase{
 		name:            "happy path, alpine:3.10",
 		remoteImageName: "ghcr.io/aquasecurity/trivy-test-images:alpine-310",
 		imageFile:       "../../../../integration/testdata/fixtures/images/alpine-310.tar.gz",
-		wantOS:          types.OS{Name: "3.10.2", Family: "alpine"},
+		wantOS: types.OS{
+			Name:   "3.10.2",
+			Family: "alpine",
+		},
 	},
 	{
 		name:            "happy path, amazonlinux:2",
 		remoteImageName: "ghcr.io/aquasecurity/trivy-test-images:amazon-2",
 		imageFile:       "../../../../integration/testdata/fixtures/images/amazon-2.tar.gz",
-		wantOS:          types.OS{Name: "2 (Karoo)", Family: "amazon"},
+		wantOS: types.OS{
+			Name:   "2 (Karoo)",
+			Family: "amazon",
+		},
 	},
 	{
 		name:            "happy path, debian:buster",
 		remoteImageName: "ghcr.io/aquasecurity/trivy-test-images:debian-buster",
 		imageFile:       "../../../../integration/testdata/fixtures/images/debian-buster.tar.gz",
-		wantOS:          types.OS{Name: "10.1", Family: "debian"},
+		wantOS: types.OS{
+			Name:   "10.1",
+			Family: "debian",
+		},
 	},
 	{
 		name:            "happy path, photon:3.0",
 		remoteImageName: "ghcr.io/aquasecurity/trivy-test-images:photon-30",
 		imageFile:       "../../../../integration/testdata/fixtures/images/photon-30.tar.gz",
-		wantOS:          types.OS{Name: "3.0", Family: "photon"},
+		wantOS: types.OS{
+			Name:   "3.0",
+			Family: "photon",
+		},
 	},
 	{
 		name:            "happy path, registry.redhat.io/ubi7",
 		remoteImageName: "ghcr.io/aquasecurity/trivy-test-images:ubi-7",
 		imageFile:       "../../../../integration/testdata/fixtures/images/ubi-7.tar.gz",
-		wantOS:          types.OS{Name: "7.7", Family: "redhat"},
+		wantOS: types.OS{
+			Name:   "7.7",
+			Family: "redhat",
+		},
 	},
 	{
 		name:            "happy path, opensuse leap 15.1",
 		remoteImageName: "ghcr.io/aquasecurity/trivy-test-images:opensuse-leap-151",
 		imageFile:       "../../../../integration/testdata/fixtures/images/opensuse-leap-151.tar.gz",
-		wantOS:          types.OS{Name: "15.1", Family: "opensuse.leap"},
+		wantOS: types.OS{
+			Name:   "15.1",
+			Family: "opensuse.leap",
+		},
 	},
 	{
 		// from registry.suse.com/suse/sle15:15.3.17.8.16
 		name:            "happy path, suse 15.3 (NDB)",
 		remoteImageName: "ghcr.io/aquasecurity/trivy-test-images:suse-15.3_ndb",
 		imageFile:       "../../../../integration/testdata/fixtures/images/suse-15.3_ndb.tar.gz",
-		wantOS:          types.OS{Name: "15.3", Family: "suse linux enterprise server"},
+		wantOS: types.OS{
+			Name:   "15.3",
+			Family: "suse linux enterprise server",
+		},
 	},
 	{
 		name:            "happy path, Fedora 35",
 		remoteImageName: "ghcr.io/aquasecurity/trivy-test-images:fedora-35",
 		imageFile:       "../../../../integration/testdata/fixtures/images/fedora-35.tar.gz",
-		wantOS:          types.OS{Name: "35", Family: "fedora"},
+		wantOS: types.OS{
+			Name:   "35",
+			Family: "fedora",
+		},
 	},
 	{
-		name:                "happy path, vulnimage with lock files",
-		remoteImageName:     "ghcr.io/aquasecurity/trivy-test-images:vulnimage",
-		imageFile:           "../../../../integration/testdata/fixtures/images/vulnimage.tar.gz",
-		wantOS:              types.OS{Name: "3.7.1", Family: "alpine"},
+		name:            "happy path, vulnimage with lock files",
+		remoteImageName: "ghcr.io/aquasecurity/trivy-test-images:vulnimage",
+		imageFile:       "../../../../integration/testdata/fixtures/images/vulnimage.tar.gz",
+		wantOS: types.OS{
+			Name:   "3.7.1",
+			Family: "alpine",
+		},
 		wantApplicationFile: "testdata/goldens/vuln-image1.2.3.expectedlibs.golden",
 		wantPkgsFromCmds:    "testdata/goldens/vuln-image1.2.3.expectedpkgsfromcmds.golden",
 	},
@@ -243,7 +272,7 @@ func runChecks(t *testing.T, ctx context.Context, ar artifact.Artifact, applier 
 }
 
 func commonChecks(t *testing.T, detail types.ArtifactDetail, tc testCase) {
-	assert.Equal(t, tc.wantOS, *detail.OS, tc.name)
+	assert.Equal(t, tc.wantOS, detail.OS, tc.name)
 	checkOSPackages(t, detail, tc)
 	checkPackageFromCommands(t, detail, tc)
 	checkLangPkgs(detail, t, tc)
@@ -251,12 +280,7 @@ func commonChecks(t *testing.T, detail types.ArtifactDetail, tc testCase) {
 
 func checkOSPackages(t *testing.T, detail types.ArtifactDetail, tc testCase) {
 	// Sort OS packages for consistency
-	sort.Slice(detail.Packages, func(i, j int) bool {
-		if detail.Packages[i].Name != detail.Packages[j].Name {
-			return detail.Packages[i].Name < detail.Packages[j].Name
-		}
-		return detail.Packages[i].Version < detail.Packages[j].Version
-	})
+	sort.Sort(detail.Packages)
 
 	splitted := strings.Split(tc.remoteImageName, ":")
 	goldenFile := fmt.Sprintf("testdata/goldens/packages/%s.json.golden", splitted[len(splitted)-1])
@@ -277,7 +301,7 @@ func checkOSPackages(t *testing.T, detail types.ArtifactDetail, tc testCase) {
 
 	require.Equal(t, len(expectedPkgs), len(detail.Packages), tc.name)
 	sort.Slice(expectedPkgs, func(i, j int) bool { return expectedPkgs[i].Name < expectedPkgs[j].Name })
-	sort.Slice(detail.Packages, func(i, j int) bool { return detail.Packages[i].Name < detail.Packages[j].Name })
+	sort.Sort(detail.Packages)
 
 	for i := 0; i < len(expectedPkgs); i++ {
 		require.Equal(t, expectedPkgs[i].Name, detail.Packages[i].Name, tc.name)
@@ -338,8 +362,8 @@ func checkPackageFromCommands(t *testing.T, detail types.ArtifactDetail, tc test
 
 		err := json.Unmarshal(data, &expectedPkgsFromCmds)
 		require.NoError(t, err)
-		assert.ElementsMatch(t, expectedPkgsFromCmds, detail.HistoryPackages, tc.name)
+		assert.ElementsMatch(t, expectedPkgsFromCmds, detail.ImageConfig.Packages, tc.name)
 	} else {
-		assert.Equal(t, []types.Package(nil), detail.HistoryPackages, tc.name)
+		assert.Equal(t, []types.Package(nil), detail.ImageConfig.Packages, tc.name)
 	}
 }

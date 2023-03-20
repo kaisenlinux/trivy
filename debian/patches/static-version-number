@@ -1,17 +1,10 @@
 Author: Kevin Chevreuil - Kaisen <kaisen@kaisenlinux.org>
 
---- trivy-0.35.0.orig/Makefile
-+++ trivy-0.35.0/Makefile
+--- trivy-0.38.3.orig/Makefile
++++ trivy-0.38.3/Makefile
 @@ -1,4 +1,4 @@
 -VERSION := $(patsubst v%,%,$(shell git describe --tags --always)) #Strips the v prefix from the tag
-+VERSION := 0.35.0
++VERSION :=  0.38.3
  LDFLAGS := -ldflags "-s -w -X=main.version=$(VERSION)"
  
  GOPATH := $(firstword $(subst :, ,$(shell go env GOPATH)))
-@@ -130,4 +130,4 @@ mkdocs-serve:
- # Generate JSON marshaler/unmarshaler for TinyGo/WebAssembly as TinyGo doesn't support encoding/json.
- .PHONY: easyjson
- easyjson: $(GOBIN)/easyjson
--	easyjson pkg/module/serialize/types.go
-\ No newline at end of file
-+	easyjson pkg/module/serialize/types.go

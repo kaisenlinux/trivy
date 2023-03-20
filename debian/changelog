@@ -1,3 +1,12 @@
+trivy (0.38.3-1kaisen) kaisen-packages; urgency=medium
+
+  * Import the 0.38.3 version
+  * Update the quilt patch
+  * Improvements of the packaging
+  * Add BASH and ZSH completions
+
+ -- Kevin Chevreuil - Kaisen <kaisen@kaisenlinux.org>  Mon, 20 Mar 2023 00:55:53 +0100
+
 trivy (0.35.0-1kaisen) kaisen-packages; urgency=medium
 
   * Import the 0.35.0 version
