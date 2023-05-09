@@ -3,14 +3,14 @@
 export GOPATH=$(CURDIR)/_build
 
 %:
-	dh $@ --buildsystem=golang
+	dh $@ --buildsystem=golang --builddirectory=_build
 
 override_dh_auto_clean:
 	rm -rf $(CURDIR)/_build
 	rm -rf $(CURDIR)/obj-x86_64-linux-gnu
 
 override_dh_auto_build:
-	make build
+	go build $(CURDIR)/cmd/trivy/
 
 override_dh_auto_test:
 
@@ -20,3 +20,5 @@ override_dh_auto_install:
 	install -p -m 0644 $(CURDIR)/contrib/*.tpl $(CURDIR)/debian/trivy/usr/share/trivy/templates/
 	$(CURDIR)/trivy completion bash > $(CURDIR)/debian/trivy/usr/share/bash-completion/completions/trivy
 	$(CURDIR)/trivy completion zsh > $(CURDIR)/debian/trivy/usr/share/zsh/vendor-completions/_trivy
+
+override_dh_dwz:

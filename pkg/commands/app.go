@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 
 	awsScanner "github.com/aquasecurity/defsec/pkg/scanners/cloud/aws"
 	"github.com/aquasecurity/trivy-db/pkg/metadata"
+	javadb "github.com/aquasecurity/trivy-java-db/pkg/db"
 	awscommands "github.com/aquasecurity/trivy/pkg/cloud/aws/commands"
 	"github.com/aquasecurity/trivy/pkg/commands/artifact"
 	"github.com/aquasecurity/trivy/pkg/commands/server"
@@ -32,6 +34,7 @@ import (
 type VersionInfo struct {
 	Version         string             `json:",omitempty"`
 	VulnerabilityDB *metadata.Metadata `json:",omitempty"`
+	JavaDB          *metadata.Metadata `json:",omitempty"`
 	PolicyBundle    *policy.Metadata   `json:",omitempty"`
 }
 
@@ -225,6 +228,7 @@ func NewImageCommand(globalFlags *flag.GlobalFlagGroup) *cobra.Command {
 		MisconfFlagGroup:       flag.NewMisconfFlagGroup(),
 		ModuleFlagGroup:        flag.NewModuleFlagGroup(),
 		RemoteFlagGroup:        flag.NewClientFlags(), // for client/server mode
+		RegistryFlagGroup:      flag.NewRegistryFlagGroup(),
 		RegoFlagGroup:          flag.NewRegoFlagGroup(),
 		ReportFlagGroup:        reportFlagGroup,
 		ScanFlagGroup:          flag.NewScanFlagGroup(),
@@ -290,9 +294,10 @@ func NewImageCommand(globalFlags *flag.GlobalFlagGroup) *cobra.Command {
 
 func NewFilesystemCommand(globalFlags *flag.GlobalFlagGroup) *cobra.Command {
 	reportFlagGroup := flag.NewReportFlagGroup()
-	reportFlagGroup.ReportFormat = nil // TODO: support --report summary
-	reportFlagGroup.Compliance = nil   // disable '--compliance'
-	reportFlagGroup.ExitOnEOL = nil    // disable '--exit-on-eol'
+	reportFormat := flag.ReportFormatFlag
+	reportFormat.Usage = "specify a compliance report format for the output. (all,summary)" //@TODO: support --report summary for non compliance reports
+	reportFlagGroup.ReportFormat = &reportFormat
+	reportFlagGroup.ExitOnEOL = nil // disable '--exit-on-eol'
 
 	fsFlags := &flag.Flags{
 		CacheFlagGroup:         flag.NewCacheFlagGroup(),
@@ -301,6 +306,7 @@ func NewFilesystemCommand(globalFlags *flag.GlobalFlagGroup) *cobra.Command {
 		MisconfFlagGroup:       flag.NewMisconfFlagGroup(),
 		ModuleFlagGroup:        flag.NewModuleFlagGroup(),
 		RemoteFlagGroup:        flag.NewClientFlags(), // for client/server mode
+		RegistryFlagGroup:      flag.NewRegistryFlagGroup(),
 		RegoFlagGroup:          flag.NewRegoFlagGroup(),
 		ReportFlagGroup:        reportFlagGroup,
 		ScanFlagGroup:          flag.NewScanFlagGroup(),
@@ -356,6 +362,7 @@ func NewRootfsCommand(globalFlags *flag.GlobalFlagGroup) *cobra.Command {
 		MisconfFlagGroup:       flag.NewMisconfFlagGroup(),
 		ModuleFlagGroup:        flag.NewModuleFlagGroup(),
 		RemoteFlagGroup:        flag.NewClientFlags(), // for client/server mode
+		RegistryFlagGroup:      flag.NewRegistryFlagGroup(),
 		RegoFlagGroup:          flag.NewRegoFlagGroup(),
 		ReportFlagGroup:        reportFlagGroup,
 		ScanFlagGroup:          flag.NewScanFlagGroup(),
@@ -412,6 +419,7 @@ func NewRepositoryCommand(globalFlags *flag.GlobalFlagGroup) *cobra.Command {
 		LicenseFlagGroup:       flag.NewLicenseFlagGroup(),
 		MisconfFlagGroup:       flag.NewMisconfFlagGroup(),
 		ModuleFlagGroup:        flag.NewModuleFlagGroup(),
+		RegistryFlagGroup:      flag.NewRegistryFlagGroup(),
 		RegoFlagGroup:          flag.NewRegoFlagGroup(),
 		RemoteFlagGroup:        flag.NewClientFlags(), // for client/server mode
 		ReportFlagGroup:        reportFlagGroup,
@@ -469,6 +477,7 @@ func NewClientCommand(globalFlags *flag.GlobalFlagGroup) *cobra.Command {
 		CacheFlagGroup:         flag.NewCacheFlagGroup(),
 		DBFlagGroup:            flag.NewDBFlagGroup(),
 		MisconfFlagGroup:       flag.NewMisconfFlagGroup(),
+		RegistryFlagGroup:      flag.NewRegistryFlagGroup(),
 		RegoFlagGroup:          flag.NewRegoFlagGroup(),
 		RemoteFlagGroup:        remoteFlags,
 		ReportFlagGroup:        flag.NewReportFlagGroup(),
@@ -510,10 +519,11 @@ func NewClientCommand(globalFlags *flag.GlobalFlagGroup) *cobra.Command {
 
 func NewServerCommand(globalFlags *flag.GlobalFlagGroup) *cobra.Command {
 	serverFlags := &flag.Flags{
-		CacheFlagGroup:  flag.NewCacheFlagGroup(),
-		DBFlagGroup:     flag.NewDBFlagGroup(),
-		ModuleFlagGroup: flag.NewModuleFlagGroup(),
-		RemoteFlagGroup: flag.NewServerFlags(),
+		CacheFlagGroup:    flag.NewCacheFlagGroup(),
+		DBFlagGroup:       flag.NewDBFlagGroup(),
+		ModuleFlagGroup:   flag.NewModuleFlagGroup(),
+		RemoteFlagGroup:   flag.NewServerFlags(),
+		RegistryFlagGroup: flag.NewRegistryFlagGroup(),
 	}
 
 	cmd := &cobra.Command{
@@ -552,9 +562,10 @@ func NewConfigCommand(globalFlags *flag.GlobalFlagGroup) *cobra.Command {
 	reportFlagGroup.DependencyTree = nil // disable '--dependency-tree'
 	reportFlagGroup.IgnorePolicy = nil   // disable '--ignore-policy'
 	reportFlagGroup.ListAllPkgs = nil    // disable '--list-all-pkgs'
-	reportFlagGroup.ReportFormat = nil   // TODO: support --report summary
-	reportFlagGroup.Compliance = nil     // disable '--compliance'
 	reportFlagGroup.ExitOnEOL = nil      // disable '--exit-on-eol'
+	reportFormat := flag.ReportFormatFlag
+	reportFormat.Usage = "specify a compliance report format for the output. (all,summary)" //@TODO: support --report summary for non compliance reports
+	reportFlagGroup.ReportFormat = &reportFormat
 
 	scanFlags := &flag.ScanFlagGroup{
 		// Enable only '--skip-dirs' and '--skip-files' and disable other flags
@@ -564,10 +575,11 @@ func NewConfigCommand(globalFlags *flag.GlobalFlagGroup) *cobra.Command {
 	}
 
 	configFlags := &flag.Flags{
-		CacheFlagGroup:   flag.NewCacheFlagGroup(),
-		MisconfFlagGroup: flag.NewMisconfFlagGroup(),
-		ModuleFlagGroup:  flag.NewModuleFlagGroup(),
-		RegoFlagGroup:    flag.NewRegoFlagGroup(),
+		CacheFlagGroup:    flag.NewCacheFlagGroup(),
+		MisconfFlagGroup:  flag.NewMisconfFlagGroup(),
+		ModuleFlagGroup:   flag.NewModuleFlagGroup(),
+		RegistryFlagGroup: flag.NewRegistryFlagGroup(),
+		RegoFlagGroup:     flag.NewRegoFlagGroup(),
 		K8sFlagGroup: &flag.K8sFlagGroup{
 			// disable unneeded flags
 			K8sVersion: &flag.K8sVersionFlag,
@@ -750,7 +762,7 @@ func NewModuleCommand(globalFlags *flag.GlobalFlagGroup) *cobra.Command {
 				if err != nil {
 					return xerrors.Errorf("flag error: %w", err)
 				}
-				return module.Install(cmd.Context(), opts.ModuleDir, repo, opts.Quiet, opts.Insecure)
+				return module.Install(cmd.Context(), opts.ModuleDir, repo, opts.Quiet, opts.Registry())
 			},
 		},
 		&cobra.Command{
@@ -805,7 +817,6 @@ func NewKubernetesCommand(globalFlags *flag.GlobalFlagGroup) *cobra.Command {
 		CacheFlagGroup:         flag.NewCacheFlagGroup(),
 		DBFlagGroup:            flag.NewDBFlagGroup(),
 		K8sFlagGroup:           flag.NewK8sFlagGroup(), // kubernetes-specific flags
-		LicenseFlagGroup:       flag.NewLicenseFlagGroup(),
 		MisconfFlagGroup:       flag.NewMisconfFlagGroup(),
 		RegoFlagGroup:          flag.NewRegoFlagGroup(),
 		ReportFlagGroup:        reportFlagGroup,
@@ -930,7 +941,6 @@ func NewVMCommand(globalFlags *flag.GlobalFlagGroup) *cobra.Command {
 	vmFlags := &flag.Flags{
 		CacheFlagGroup:         flag.NewCacheFlagGroup(),
 		DBFlagGroup:            flag.NewDBFlagGroup(),
-		LicenseFlagGroup:       flag.NewLicenseFlagGroup(),
 		MisconfFlagGroup:       flag.NewMisconfFlagGroup(),
 		ModuleFlagGroup:        flag.NewModuleFlagGroup(),
 		RemoteFlagGroup:        flag.NewClientFlags(), // for client/server mode
@@ -1073,6 +1083,7 @@ func NewVersionCommand(globalFlags *flag.GlobalFlagGroup) *cobra.Command {
 
 func showVersion(cacheDir, outputFormat, version string, outputWriter io.Writer) {
 	var dbMeta *metadata.Metadata
+	var javadbMeta *metadata.Metadata
 
 	mc := metadata.NewClient(cacheDir)
 	meta, _ := mc.Get() // nolint: errcheck
@@ -1082,6 +1093,17 @@ func showVersion(cacheDir, outputFormat, version string, outputWriter io.Writer)
 			NextUpdate:   meta.NextUpdate.UTC(),
 			UpdatedAt:    meta.UpdatedAt.UTC(),
 			DownloadedAt: meta.DownloadedAt.UTC(),
+		}
+	}
+
+	mcJava := javadb.NewMetadata(filepath.Join(cacheDir, "java-db"))
+	metaJava, _ := mcJava.Get() // nolint: errcheck
+	if !metaJava.UpdatedAt.IsZero() && !metaJava.NextUpdate.IsZero() && metaJava.Version != 0 {
+		javadbMeta = &metadata.Metadata{
+			Version:      metaJava.Version,
+			NextUpdate:   metaJava.NextUpdate.UTC(),
+			UpdatedAt:    metaJava.UpdatedAt.UTC(),
+			DownloadedAt: metaJava.DownloadedAt.UTC(),
 		}
 	}
 
@@ -1096,6 +1118,7 @@ func showVersion(cacheDir, outputFormat, version string, outputWriter io.Writer)
 		b, _ := json.Marshal(VersionInfo{
 			Version:         version,
 			VulnerabilityDB: dbMeta,
+			JavaDB:          javadbMeta,
 			PolicyBundle:    pbMeta,
 		})
 		fmt.Fprintln(outputWriter, string(b))
@@ -1108,6 +1131,15 @@ func showVersion(cacheDir, outputFormat, version string, outputWriter io.Writer)
   NextUpdate: %s
   DownloadedAt: %s
 `, dbMeta.Version, dbMeta.UpdatedAt.UTC(), dbMeta.NextUpdate.UTC(), dbMeta.DownloadedAt.UTC())
+		}
+
+		if javadbMeta != nil {
+			output += fmt.Sprintf(`Java DB:
+  Version: %d
+  UpdatedAt: %s
+  NextUpdate: %s
+  DownloadedAt: %s
+`, javadbMeta.Version, javadbMeta.UpdatedAt.UTC(), javadbMeta.NextUpdate.UTC(), javadbMeta.DownloadedAt.UTC())
 		}
 
 		if pbMeta != nil {

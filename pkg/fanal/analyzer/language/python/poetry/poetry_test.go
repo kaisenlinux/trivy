@@ -14,10 +14,9 @@ import (
 
 func Test_poetryLibraryAnalyzer_Analyze(t *testing.T) {
 	tests := []struct {
-		name    string
-		dir     string
-		want    *analyzer.AnalysisResult
-		wantErr string
+		name string
+		dir  string
+		want *analyzer.AnalysisResult
 	}{
 		{
 			name: "happy path",
@@ -140,9 +139,36 @@ func Test_poetryLibraryAnalyzer_Analyze(t *testing.T) {
 			},
 		},
 		{
-			name:    "broken poetry.lock",
-			dir:     "testdata/sad",
-			wantErr: "unable to parse poetry.lock",
+			name: "wrong pyproject.toml",
+			dir:  "testdata/wrong-pyproject",
+			want: &analyzer.AnalysisResult{
+				Applications: []types.Application{
+					{
+						Type:     types.Poetry,
+						FilePath: "poetry.lock",
+						Libraries: []types.Package{
+							{
+								ID:      "click@8.1.3",
+								Name:    "click",
+								Version: "8.1.3",
+								DependsOn: []string{
+									"colorama@0.4.6",
+								},
+							},
+							{
+								ID:      "colorama@0.4.6",
+								Name:    "colorama",
+								Version: "0.4.6",
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "broken poetry.lock",
+			dir:  "testdata/sad",
+			want: &analyzer.AnalysisResult{},
 		},
 	}
 
@@ -154,11 +180,6 @@ func Test_poetryLibraryAnalyzer_Analyze(t *testing.T) {
 			got, err := a.PostAnalyze(context.Background(), analyzer.PostAnalysisInput{
 				FS: os.DirFS(tt.dir),
 			})
-
-			if tt.wantErr != "" {
-				assert.ErrorContains(t, err, tt.wantErr)
-				return
-			}
 
 			assert.NoError(t, err)
 			assert.Equal(t, tt.want, got)

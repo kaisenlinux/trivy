@@ -21,10 +21,10 @@ var separator = "/"
 // - a virtual file
 // - a virtual dir
 type file struct {
-	path  string // underlying file path
-	data  []byte // virtual file, only either of 'path' or 'data' has a value.
-	stat  fileStat
-	files syncx.Map[string, *file]
+	underlyingPath string // underlying file path
+	data           []byte // virtual file, only either of 'path' or 'data' has a value.
+	stat           fileStat
+	files          syncx.Map[string, *file]
 }
 
 func (f *file) isVirtual() bool {
@@ -36,8 +36,7 @@ func (f *file) Open(name string) (fs.File, error) {
 		return f.open()
 	}
 
-	// TODO: support directory
-	if sub, err := f.getFile(name); err == nil && !sub.stat.IsDir() {
+	if sub, err := f.getFile(name); err == nil {
 		return sub.open()
 	}
 
@@ -49,16 +48,26 @@ func (f *file) Open(name string) (fs.File, error) {
 }
 
 func (f *file) open() (fs.File, error) {
-	// virtual file
-	if len(f.data) != 0 {
+	switch {
+	case f.stat.IsDir(): // Directory
+		entries, err := f.ReadDir(".")
+		if err != nil {
+			return nil, xerrors.Errorf("read dir error: %w", err)
+		}
+		return &mapDir{
+			path:     f.underlyingPath,
+			fileStat: f.stat,
+			entry:    entries,
+		}, nil
+	case len(f.data) != 0: // Virtual file
 		return &openMapFile{
 			path:   f.stat.name,
 			file:   f,
 			offset: 0,
 		}, nil
+	default: // Real file
+		return os.Open(f.underlyingPath)
 	}
-	// real file
-	return os.Open(f.path)
 }
 
 func (f *file) Remove(name string) error {
@@ -131,7 +140,7 @@ func (f *file) ReadDir(name string) ([]fs.DirEntry, error) {
 				entries = append(entries, &value.stat)
 			} else {
 				var fi os.FileInfo
-				fi, err = os.Stat(value.path)
+				fi, err = os.Stat(value.underlyingPath)
 				if err != nil {
 					return false
 				}
@@ -167,24 +176,24 @@ func (f *file) MkdirAll(path string, perm fs.FileMode) error {
 		return nil
 	}
 
-	sub, ok := f.files.Load(parts[0])
-	if ok && !sub.stat.IsDir() {
-		return fs.ErrExist
-	} else if !ok {
-		if perm&fs.ModeDir == 0 {
-			perm |= fs.ModeDir
-		}
+	if perm&fs.ModeDir == 0 {
+		perm |= fs.ModeDir
+	}
 
-		sub = &file{
-			stat: fileStat{
-				name:    parts[0],
-				size:    0x100,
-				modTime: time.Now(),
-				mode:    perm,
-			},
-			files: syncx.Map[string, *file]{},
-		}
-		f.files.Store(parts[0], sub)
+	sub := &file{
+		stat: fileStat{
+			name:    parts[0],
+			size:    0x100,
+			modTime: time.Now(),
+			mode:    perm,
+		},
+		files: syncx.Map[string, *file]{},
+	}
+
+	// Create the directory when the key is not present
+	sub, loaded := f.files.LoadOrStore(parts[0], sub)
+	if loaded && !sub.stat.IsDir() {
+		return fs.ErrExist
 	}
 
 	if len(parts) == 1 {
@@ -199,7 +208,7 @@ func (f *file) WriteFile(path, underlyingPath string) error {
 
 	if len(parts) == 1 {
 		f.files.Store(parts[0], &file{
-			path: underlyingPath,
+			underlyingPath: underlyingPath,
 		})
 		return nil
 	}
@@ -213,6 +222,9 @@ func (f *file) WriteFile(path, underlyingPath string) error {
 }
 
 func (f *file) WriteVirtualFile(path string, data []byte, mode fs.FileMode) error {
+	if mode&fs.ModeDir != 0 {
+		return xerrors.Errorf("invalid perm: %v", mode)
+	}
 	parts := strings.Split(path, separator)
 
 	if len(parts) == 1 {
@@ -287,7 +299,11 @@ func (f *openMapFile) Read(b []byte) (int, error) {
 		return 0, io.EOF
 	}
 	if f.offset < 0 {
-		return 0, &fs.PathError{Op: "read", Path: f.path, Err: fs.ErrInvalid}
+		return 0, &fs.PathError{
+			Op:   "read",
+			Path: f.path,
+			Err:  fs.ErrInvalid,
+		}
 	}
 	n := copy(b, f.file.data[f.offset:])
 	f.offset += int64(n)
@@ -304,7 +320,11 @@ func (f *openMapFile) Seek(offset int64, whence int) (int64, error) {
 		offset += int64(len(f.file.data))
 	}
 	if offset < 0 || offset > int64(len(f.file.data)) {
-		return 0, &fs.PathError{Op: "seek", Path: f.path, Err: fs.ErrInvalid}
+		return 0, &fs.PathError{
+			Op:   "seek",
+			Path: f.path,
+			Err:  fs.ErrInvalid,
+		}
 	}
 	f.offset = offset
 	return offset, nil
@@ -312,11 +332,49 @@ func (f *openMapFile) Seek(offset int64, whence int) (int64, error) {
 
 func (f *openMapFile) ReadAt(b []byte, offset int64) (int, error) {
 	if offset < 0 || offset > int64(len(f.file.data)) {
-		return 0, &fs.PathError{Op: "read", Path: f.path, Err: fs.ErrInvalid}
+		return 0, &fs.PathError{
+			Op:   "read",
+			Path: f.path,
+			Err:  fs.ErrInvalid,
+		}
 	}
 	n := copy(b, f.file.data[offset:])
 	if n < len(b) {
 		return n, io.EOF
 	}
 	return n, nil
+}
+
+// A mapDir is a directory fs.File (so also fs.ReadDirFile) open for reading.
+type mapDir struct {
+	path string
+	fileStat
+	entry  []fs.DirEntry
+	offset int
+}
+
+func (d *mapDir) Stat() (fs.FileInfo, error) { return &d.fileStat, nil }
+func (d *mapDir) Close() error               { return nil }
+func (d *mapDir) Read(_ []byte) (int, error) {
+	return 0, &fs.PathError{
+		Op:   "read",
+		Path: d.path,
+		Err:  fs.ErrInvalid,
+	}
+}
+
+func (d *mapDir) ReadDir(count int) ([]fs.DirEntry, error) {
+	n := len(d.entry) - d.offset
+	if n == 0 && count > 0 {
+		return nil, io.EOF
+	}
+	if count > 0 && n > count {
+		n = count
+	}
+	list := make([]fs.DirEntry, n)
+	for i := range list {
+		list[i] = d.entry[d.offset+i]
+	}
+	d.offset += n
+	return list, nil
 }

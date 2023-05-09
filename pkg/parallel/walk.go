@@ -4,6 +4,7 @@ import (
 	"context"
 	"io/fs"
 
+	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/xerrors"
 
@@ -12,10 +13,10 @@ import (
 )
 
 type onFile[T any] func(string, fs.FileInfo, dio.ReadSeekerAt) (T, error)
-type onResult[T any] func(T) error
+type onWalkResult[T any] func(T) error
 
 func WalkDir[T any](ctx context.Context, fsys fs.FS, root string, slow bool,
-	onFile onFile[T], onResult onResult[T]) error {
+	onFile onFile[T], onResult onWalkResult[T]) error {
 
 	g, ctx := errgroup.WithContext(ctx)
 	paths := make(chan string)
@@ -104,7 +105,8 @@ func walk[T any](ctx context.Context, fsys fs.FS, path string, c chan T, onFile 
 	}
 	res, err := onFile(path, info, rsa)
 	if err != nil {
-		return xerrors.Errorf("on file: %w", err)
+		log.Logger.Debugw("Walk error", zap.String("file_path", path), zap.Error(err))
+		return nil
 	}
 
 	select {

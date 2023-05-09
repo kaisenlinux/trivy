@@ -7,9 +7,11 @@ import (
 	"os"
 	"path/filepath"
 
+	"go.uber.org/zap"
 	"golang.org/x/xerrors"
 
 	dio "github.com/aquasecurity/go-dep-parser/pkg/io"
+	"github.com/aquasecurity/trivy/pkg/log"
 )
 
 const (
@@ -18,8 +20,8 @@ const (
 
 var cacheDir string
 
-// DefaultCacheDir returns/creates the cache-dir to be used for trivy operations
-func DefaultCacheDir() string {
+// defaultCacheDir returns/creates the cache-dir to be used for trivy operations
+func defaultCacheDir() string {
 	tmpDir, err := os.UserCacheDir()
 	if err != nil {
 		tmpDir = os.TempDir()
@@ -29,6 +31,9 @@ func DefaultCacheDir() string {
 
 // CacheDir returns the directory used for caching
 func CacheDir() string {
+	if cacheDir == "" {
+		return defaultCacheDir()
+	}
 	return cacheDir
 }
 
@@ -103,6 +108,9 @@ func WalkDir(fsys fs.FS, root string, required WalkDirRequiredFunc, fn WalkDirFu
 		}
 		defer f.Close()
 
-		return fn(path, d, file)
+		if err = fn(path, d, file); err != nil {
+			log.Logger.Debugw("Walk error", zap.String("file_path", path), zap.Error(err))
+		}
+		return nil
 	})
 }
