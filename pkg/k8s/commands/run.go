@@ -10,8 +10,10 @@ import (
 	"github.com/aquasecurity/trivy-kubernetes/pkg/artifacts"
 	"github.com/aquasecurity/trivy-kubernetes/pkg/k8s"
 	cmd "github.com/aquasecurity/trivy/pkg/commands/artifact"
+	"github.com/aquasecurity/trivy/pkg/commands/operation"
 	cr "github.com/aquasecurity/trivy/pkg/compliance/report"
 	"github.com/aquasecurity/trivy/pkg/flag"
+	k8sRep "github.com/aquasecurity/trivy/pkg/k8s"
 	"github.com/aquasecurity/trivy/pkg/k8s/report"
 	"github.com/aquasecurity/trivy/pkg/k8s/scanner"
 	"github.com/aquasecurity/trivy/pkg/log"
@@ -36,7 +38,7 @@ func Run(ctx context.Context, args []string, opts flag.Options) error {
 	defer cancel()
 
 	defer func() {
-		if xerrors.Is(err, context.DeadlineExceeded) {
+		if errors.Is(err, context.DeadlineExceeded) {
 			log.Logger.Warn("Increase --timeout value")
 		}
 	}()
@@ -87,18 +89,15 @@ func (r *runner) run(ctx context.Context, artifacts []*artifacts.Artifact) error
 		}
 		r.flagOpts.ScanOptions.Scanners = scanners
 	}
-
-	rpt, err := s.Scan(ctx, artifacts)
+	var rpt report.Report
+	rpt, err = s.Scan(ctx, artifacts)
 	if err != nil {
 		return xerrors.Errorf("k8s scan error: %w", err)
 	}
 
 	if r.flagOpts.Compliance.Spec.ID != "" {
 		var scanResults []types.Results
-		for _, rss := range rpt.Vulnerabilities {
-			scanResults = append(scanResults, rss.Results)
-		}
-		for _, rss := range rpt.Misconfigurations {
+		for _, rss := range rpt.Resources {
 			scanResults = append(scanResults, rss.Results)
 		}
 		complianceReport, err := cr.BuildComplianceReport(scanResults, r.flagOpts.Compliance)
@@ -112,18 +111,19 @@ func (r *runner) run(ctx context.Context, artifacts []*artifacts.Artifact) error
 		})
 	}
 
-	if err := report.Write(rpt, report.Option{
+	if err := k8sRep.Write(rpt, report.Option{
 		Format:     r.flagOpts.Format,
 		Report:     r.flagOpts.ReportFormat,
 		Output:     r.flagOpts.Output,
 		Severities: r.flagOpts.Severities,
 		Components: r.flagOpts.Components,
 		Scanners:   r.flagOpts.ScanOptions.Scanners,
+		APIVersion: r.flagOpts.AppVersion,
 	}); err != nil {
 		return xerrors.Errorf("unable to write results: %w", err)
 	}
 
-	cmd.Exit(r.flagOpts, rpt.Failed())
+	operation.Exit(r.flagOpts, rpt.Failed())
 
 	return nil
 }

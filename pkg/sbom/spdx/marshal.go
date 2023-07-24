@@ -138,7 +138,12 @@ func (m *Marshaler) Marshal(r types.Report) (*spdx.Document, error) {
 		relationShip(DocumentSPDXIdentifier, rootPkg.PackageSPDXIdentifier, RelationShipDescribe),
 	)
 
+	var spdxFiles []*spdx.File
+
 	for _, result := range r.Results {
+		if len(result.Packages) == 0 {
+			continue
+		}
 		parentPackage, err := m.resultToSpdxPackage(result, r.Metadata.OS, pkgDownloadLocation)
 		if err != nil {
 			return nil, xerrors.Errorf("failed to parse result: %w", err)
@@ -157,6 +162,16 @@ func (m *Marshaler) Marshal(r types.Report) (*spdx.Document, error) {
 			relationShips = append(relationShips,
 				relationShip(parentPackage.PackageSPDXIdentifier, spdxPackage.PackageSPDXIdentifier, RelationShipContains),
 			)
+			files, err := m.pkgFiles(pkg)
+			if err != nil {
+				return nil, xerrors.Errorf("package file error: %w", err)
+			}
+			spdxFiles = append(spdxFiles, files...)
+			for _, file := range files {
+				relationShips = append(relationShips,
+					relationShip(spdxPackage.PackageSPDXIdentifier, file.FileSPDXIdentifier, RelationShipContains),
+				)
+			}
 		}
 	}
 
@@ -181,6 +196,7 @@ func (m *Marshaler) Marshal(r types.Report) (*spdx.Document, error) {
 		},
 		Packages:      toPackages(packages),
 		Relationships: relationShips,
+		Files:         spdxFiles,
 	}, nil
 }
 
@@ -258,7 +274,7 @@ func (m *Marshaler) rootPackage(r types.Report, pkgDownloadLocation string) (*sp
 
 	pkgID, err := calcPkgID(m.hasher, fmt.Sprintf("%s-%s", r.ArtifactName, r.ArtifactType))
 	if err != nil {
-		return nil, xerrors.Errorf("failed to get %s package ID: %w", err)
+		return nil, xerrors.Errorf("failed to get %s package ID: %w", pkgID, err)
 	}
 
 	pkgPurpose := PackagePurposeSource
@@ -334,11 +350,6 @@ func (m *Marshaler) pkgToSpdxPackage(t, pkgDownloadLocation string, class types.
 	attrTexts = appendAttributionText(attrTexts, PropertyLayerDigest, pkg.Layer.Digest)
 	attrTexts = appendAttributionText(attrTexts, PropertyLayerDiffID, pkg.Layer.DiffID)
 
-	files, err := m.pkgFiles(pkg)
-	if err != nil {
-		return spdx.Package{}, xerrors.Errorf("package file error: %w", err)
-	}
-
 	supplier := &spdx.Supplier{Supplier: PackageSupplierNoAssertion}
 	if pkg.Maintainer != "" {
 		supplier = &spdx.Supplier{
@@ -346,6 +357,12 @@ func (m *Marshaler) pkgToSpdxPackage(t, pkgDownloadLocation string, class types.
 			Supplier:     pkg.Maintainer,
 		}
 	}
+
+	var checksum []spdx.Checksum
+	if pkg.Digest != "" && class == types.ClassOSPkg {
+		checksum = digestToSpdxFileChecksum(pkg.Digest)
+	}
+
 	return spdx.Package{
 		PackageName:             pkg.Name,
 		PackageVersion:          utils.FormatVersion(pkg),
@@ -363,7 +380,7 @@ func (m *Marshaler) pkgToSpdxPackage(t, pkgDownloadLocation string, class types.
 		PackageAttributionTexts:   attrTexts,
 		PrimaryPackagePurpose:     PackagePurposeLibrary,
 		PackageSupplier:           supplier,
-		Files:                     files,
+		PackageChecksums:          checksum,
 	}, nil
 }
 
@@ -374,7 +391,7 @@ func (m *Marshaler) pkgFiles(pkg ftypes.Package) ([]*spdx.File, error) {
 
 	file, err := m.parseFile(pkg.FilePath, pkg.Digest)
 	if err != nil {
-		return nil, xerrors.Errorf("failed to parse file: %w")
+		return nil, xerrors.Errorf("failed to parse file: %w", err)
 	}
 	return []*spdx.File{
 		&file,
@@ -500,6 +517,8 @@ func digestToSpdxFileChecksum(d digest.Digest) []common.Checksum {
 		alg = spdx.SHA1
 	case digest.SHA256:
 		alg = spdx.SHA256
+	case digest.MD5:
+		alg = spdx.MD5
 	default:
 		return nil
 	}

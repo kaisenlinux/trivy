@@ -1,13 +1,13 @@
 Author: Kevin Chevreuil - Kaisen <kaisen@kaisenlinux.org>
 
---- trivy-0.41.0.orig/cmd/trivy/main.go
-+++ trivy-0.41.0/cmd/trivy/main.go
+--- trivy-0.43.1.orig/cmd/trivy/main.go
++++ trivy-0.43.1/cmd/trivy/main.go
 @@ -14,7 +14,7 @@ import (
  )
  
  var (
 -	version = "dev"
-+	version = "0.41.0"
++	version = "0.43.1"
  )
  
  func main() {

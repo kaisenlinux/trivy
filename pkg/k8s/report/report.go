@@ -7,22 +7,18 @@ import (
 
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
-	"golang.org/x/xerrors"
 
 	dbTypes "github.com/aquasecurity/trivy-db/pkg/types"
 	"github.com/aquasecurity/trivy-kubernetes/pkg/artifacts"
 	ftypes "github.com/aquasecurity/trivy/pkg/fanal/types"
 	"github.com/aquasecurity/trivy/pkg/log"
-	"github.com/aquasecurity/trivy/pkg/report/table"
+	"github.com/aquasecurity/trivy/pkg/sbom/cyclonedx/core"
 	"github.com/aquasecurity/trivy/pkg/types"
 )
 
 const (
-	allReport     = "all"
-	summaryReport = "summary"
-
-	tableFormat = "table"
-	jsonFormat  = "json"
+	AllReport     = "all"
+	SummaryReport = "summary"
 
 	workloadComponent = "workload"
 	infraComponent    = "infra"
@@ -36,15 +32,16 @@ type Option struct {
 	ColumnHeading []string
 	Scanners      types.Scanners
 	Components    []string
+	APIVersion    string
 }
 
 // Report represents a kubernetes scan report
 type Report struct {
-	SchemaVersion     int `json:",omitempty"`
-	ClusterName       string
-	Vulnerabilities   []Resource `json:",omitempty"`
-	Misconfigurations []Resource `json:",omitempty"`
-	name              string
+	SchemaVersion int `json:",omitempty"`
+	ClusterName   string
+	Resources     []Resource      `json:",omitempty"`
+	RootComponent *core.Component `json:"-"`
+	name          string
 }
 
 // ConsolidatedReport represents a kubernetes scan report with consolidated findings
@@ -74,18 +71,11 @@ func (r Resource) fullname() string {
 
 // Failed returns whether the k8s report includes any vulnerabilities or misconfigurations
 func (r Report) Failed() bool {
-	for _, v := range r.Vulnerabilities {
+	for _, v := range r.Resources {
 		if v.Results.Failed() {
 			return true
 		}
 	}
-
-	for _, m := range r.Misconfigurations {
-		if m.Results.Failed() {
-			return true
-		}
-	}
-
 	return false
 }
 
@@ -96,12 +86,16 @@ func (r Report) consolidate() ConsolidatedReport {
 	}
 
 	index := make(map[string]Resource)
-
-	for _, m := range r.Misconfigurations {
-		index[m.fullname()] = m
+	vulnerabilities := make([]Resource, 0)
+	for _, m := range r.Resources {
+		if vulnerabilitiesOrSecretResource(m) {
+			vulnerabilities = append(vulnerabilities, m)
+		} else {
+			index[m.fullname()] = m
+		}
 	}
 
-	for _, v := range r.Vulnerabilities {
+	for _, v := range vulnerabilities {
 		key := v.fullname()
 
 		if res, ok := index[key]; ok {
@@ -129,65 +123,33 @@ type Writer interface {
 	Write(Report) error
 }
 
-// Write writes the results in the give format
-func Write(report Report, option Option) error {
-	report.printErrors()
-
-	switch option.Format {
-	case jsonFormat:
-		jwriter := JSONWriter{
-			Output: option.Output,
-			Report: option.Report,
-		}
-		return jwriter.Write(report)
-	case tableFormat:
-		separatedReports := separateMisconfigReports(report, option.Scanners, option.Components)
-
-		if option.Report == summaryReport {
-			target := fmt.Sprintf("Summary Report for %s", report.ClusterName)
-			table.RenderTarget(option.Output, target, table.IsOutputToTerminal(option.Output))
-		}
-
-		for _, r := range separatedReports {
-			writer := &TableWriter{
-				Output:        option.Output,
-				Report:        option.Report,
-				Severities:    option.Severities,
-				ColumnHeading: ColumnHeading(option.Scanners, option.Components, r.columns),
-			}
-
-			if err := writer.Write(r.report); err != nil {
-				return err
-			}
-		}
-
-		return nil
-	default:
-		return xerrors.Errorf(`unknown format %q. Use "json" or "table"`, option.Format)
-	}
-}
-
 type reports struct {
-	report  Report
-	columns []string
+	Report  Report
+	Columns []string
 }
 
-// separateMisconfigReports returns 3 reports based on scanners and components flags,
+// SeparateMisconfigReports returns 3 reports based on scanners and components flags,
 // - misconfiguration report
 // - rbac report
 // - infra checks report
-func separateMisconfigReports(k8sReport Report, scanners types.Scanners, components []string) []reports {
+func SeparateMisconfigReports(k8sReport Report, scanners types.Scanners, components []string) []reports {
 
 	workloadMisconfig := make([]Resource, 0)
 	infraMisconfig := make([]Resource, 0)
 	rbacAssessment := make([]Resource, 0)
+	workloadVulnerabilities := make([]Resource, 0)
+	workloadResource := make([]Resource, 0)
+	for _, resource := range k8sReport.Resources {
+		if vulnerabilitiesOrSecretResource(resource) {
+			workloadVulnerabilities = append(workloadVulnerabilities, resource)
+			continue
+		}
 
-	for _, misConfig := range k8sReport.Misconfigurations {
 		switch {
-		case scanners.Enabled(types.RBACScanner) && rbacResource(misConfig):
-			rbacAssessment = append(rbacAssessment, misConfig)
-		case infraResource(misConfig):
-			workload, infra := splitInfraAndWorkloadResources(misConfig)
+		case scanners.Enabled(types.RBACScanner) && rbacResource(resource):
+			rbacAssessment = append(rbacAssessment, resource)
+		case infraResource(resource):
+			workload, infra := splitInfraAndWorkloadResources(resource)
 
 			if slices.Contains(components, infraComponent) {
 				infraMisconfig = append(infraMisconfig, infra)
@@ -197,43 +159,43 @@ func separateMisconfigReports(k8sReport Report, scanners types.Scanners, compone
 				workloadMisconfig = append(workloadMisconfig, workload)
 			}
 
-		case scanners.Enabled(types.MisconfigScanner) && !rbacResource(misConfig):
+		case scanners.Enabled(types.MisconfigScanner) && !rbacResource(resource):
 			if slices.Contains(components, workloadComponent) {
-				workloadMisconfig = append(workloadMisconfig, misConfig)
+				workloadMisconfig = append(workloadMisconfig, resource)
 			}
 		}
 	}
 
 	r := make([]reports, 0)
-
+	workloadResource = append(workloadResource, workloadVulnerabilities...)
+	workloadResource = append(workloadResource, workloadMisconfig...)
 	if shouldAddWorkloadReport(scanners) {
 		workloadReport := Report{
-			SchemaVersion:     0,
-			ClusterName:       k8sReport.ClusterName,
-			Misconfigurations: workloadMisconfig,
-			Vulnerabilities:   k8sReport.Vulnerabilities,
-			name:              "Workload Assessment",
+			SchemaVersion: 0,
+			ClusterName:   k8sReport.ClusterName,
+			Resources:     workloadResource,
+			name:          "Workload Assessment",
 		}
 
 		if (slices.Contains(components, workloadComponent) &&
 			len(workloadMisconfig) > 0) ||
-			len(k8sReport.Vulnerabilities) > 0 {
+			len(workloadVulnerabilities) > 0 {
 			r = append(r, reports{
-				report:  workloadReport,
-				columns: WorkloadColumns(),
+				Report:  workloadReport,
+				Columns: WorkloadColumns(),
 			})
 		}
 	}
 
 	if scanners.Enabled(types.RBACScanner) && len(rbacAssessment) > 0 {
 		r = append(r, reports{
-			report: Report{
-				SchemaVersion:     0,
-				ClusterName:       k8sReport.ClusterName,
-				Misconfigurations: rbacAssessment,
-				name:              "RBAC Assessment",
+			Report: Report{
+				SchemaVersion: 0,
+				ClusterName:   k8sReport.ClusterName,
+				Resources:     rbacAssessment,
+				name:          "RBAC Assessment",
 			},
-			columns: RoleColumns(),
+			Columns: RoleColumns(),
 		})
 	}
 
@@ -242,13 +204,13 @@ func separateMisconfigReports(k8sReport Report, scanners types.Scanners, compone
 		len(infraMisconfig) > 0 {
 
 		r = append(r, reports{
-			report: Report{
-				SchemaVersion:     0,
-				ClusterName:       k8sReport.ClusterName,
-				Misconfigurations: infraMisconfig,
-				name:              "Infra Assessment",
+			Report: Report{
+				SchemaVersion: 0,
+				ClusterName:   k8sReport.ClusterName,
+				Resources:     infraMisconfig,
+				name:          "Infra Assessment",
 			},
-			columns: InfraColumns(),
+			Columns: InfraColumns(),
 		})
 	}
 
@@ -291,16 +253,10 @@ func CreateResource(artifact *artifacts.Artifact, report types.Report, err error
 	return r
 }
 
-func (r Report) printErrors() {
-	for _, resource := range r.Vulnerabilities {
+func (r Report) PrintErrors() {
+	for _, resource := range r.Resources {
 		if resource.Error != "" {
-			log.Logger.Errorf("Error during vulnerabilities scan: %s", resource.Error)
-		}
-	}
-
-	for _, resource := range r.Misconfigurations {
-		if resource.Error != "" {
-			log.Logger.Errorf("Error during misconfiguration scan: %s", resource.Error)
+			log.Logger.Errorf("Error during vulnerabilities or misconfiguration scan: %s", resource.Error)
 		}
 	}
 }
@@ -365,4 +321,8 @@ func copyResult(r types.Result, misconfigs []types.DetectedMisconfiguration) typ
 
 func shouldAddWorkloadReport(scanners types.Scanners) bool {
 	return scanners.AnyEnabled(types.MisconfigScanner, types.VulnerabilityScanner, types.SecretScanner)
+}
+
+func vulnerabilitiesOrSecretResource(resource Resource) bool {
+	return len(resource.Results) > 0 && (len(resource.Results[0].Vulnerabilities) > 0 || len(resource.Results[0].Secrets) > 0)
 }

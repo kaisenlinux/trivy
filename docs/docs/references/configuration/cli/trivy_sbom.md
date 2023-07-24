@@ -12,9 +12,6 @@ trivy sbom [flags] SBOM_PATH
   # Scan CycloneDX and show the result in tables
   $ trivy sbom /path/to/report.cdx
 
-  # Scan CycloneDX and generate a CycloneDX report
-  $ trivy sbom --format cyclonedx /path/to/report.cdx
-
   # Scan CycloneDX-type attestation and show the result in tables
   $ trivy sbom /path/to/report.cdx.intoto.jsonl
 
@@ -51,7 +48,6 @@ trivy sbom [flags] SBOM_PATH
       --rekor-url string            [EXPERIMENTAL] address of rekor STL server (default "https://rekor.sigstore.dev")
       --reset                       remove all caches and database
       --sbom-sources strings        [EXPERIMENTAL] try to retrieve SBOM from the specified sources (oci,rekor)
-      --scanners strings            comma-separated list of what security issues to detect (vuln,config,secret,license) (default [vuln,secret])
       --server string               server address in client mode
   -s, --severity string             severities of security issues to be displayed (comma separated) (default "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL")
       --skip-db-update              skip updating vulnerability database
@@ -63,7 +59,7 @@ trivy sbom [flags] SBOM_PATH
       --token string                for authentication in client/server mode
       --token-header string         specify a header name for token in client/server mode (default "Trivy-Token")
       --vex string                  [EXPERIMENTAL] file path to VEX
-      --vuln-type string            comma-separated list of vulnerability types (os,library) (default "os,library")
+      --vuln-type strings           comma-separated list of vulnerability types (os,library) (default [os,library])
 ```
 
 ### Options inherited from parent commands

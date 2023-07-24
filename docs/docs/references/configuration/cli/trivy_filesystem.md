@@ -43,6 +43,7 @@ trivy filesystem [flags] PATH
       --ignore-unfixed                   display only fixed vulnerabilities
       --ignored-licenses strings         specify a list of license to ignore
       --ignorefile string                specify .trivyignore file (default ".trivyignore")
+      --include-dev-deps                 include development dependencies in the report (supported: npm)
       --include-non-failures             include successes and exceptions, available with '--scanners config'
       --java-db-repository string        OCI repository to retrieve trivy-java-db from (default "ghcr.io/aquasecurity/trivy-java-db")
       --license-confidence-level float   specify license classifier's confidence level (default 0.9)
@@ -62,6 +63,7 @@ trivy filesystem [flags] PATH
       --rekor-url string                 [EXPERIMENTAL] address of rekor STL server (default "https://rekor.sigstore.dev")
       --report string                    specify a compliance report format for the output. (all,summary) (default "all")
       --reset                            remove all caches and database
+      --reset-policy-bundle              remove policy bundle
       --sbom-sources strings             [EXPERIMENTAL] try to retrieve SBOM from the specified sources (oci,rekor)
       --scanners strings                 comma-separated list of what security issues to detect (vuln,config,secret,license) (default [vuln,secret])
       --secret-config string             specify a path to config file for secret scanning (default "trivy-secret.yaml")
@@ -79,7 +81,7 @@ trivy filesystem [flags] PATH
       --token-header string              specify a header name for token in client/server mode (default "Trivy-Token")
       --trace                            enable more verbose trace output for custom queries
       --username strings                 username. Comma-separated usernames allowed.
-      --vuln-type string                 comma-separated list of vulnerability types (os,library) (default "os,library")
+      --vuln-type strings                comma-separated list of vulnerability types (os,library) (default [os,library])
 ```
 
 ### Options inherited from parent commands
