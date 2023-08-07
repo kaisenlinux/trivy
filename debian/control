@@ -13,7 +13,6 @@ Package: trivy
 Architecture: amd64 i386 arm64
 Depends: ${shlibs:Depends},
 	 ${misc:Depends},
-	 golang-go (>= 1.19)
 Description: Vulnerabilities scanner for containers
  Scanner for vulnerabilities in container images, file systems,
  and Git repositories, as well as for configuration issues
