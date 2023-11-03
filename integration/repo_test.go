@@ -7,12 +7,15 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/aquasecurity/trivy/pkg/clock"
 	ftypes "github.com/aquasecurity/trivy/pkg/fanal/types"
 	"github.com/aquasecurity/trivy/pkg/types"
+	"github.com/aquasecurity/trivy/pkg/uuid"
 )
 
 // TestRepository tests `trivy repo` with the local code repositories
@@ -31,7 +34,7 @@ func TestRepository(t *testing.T) {
 		skipFiles      []string
 		skipDirs       []string
 		command        string
-		format         string
+		format         types.Format
 		includeDevDeps bool
 	}
 	tests := []struct {
@@ -171,6 +174,15 @@ func TestRepository(t *testing.T) {
 				input:       "testdata/fixtures/repo/dotnet",
 			},
 			golden: "testdata/dotnet.json.golden",
+		},
+		{
+			name: "swift",
+			args: args{
+				scanner:     types.VulnerabilityScanner,
+				listAllPkgs: true,
+				input:       "testdata/fixtures/repo/swift",
+			},
+			golden: "testdata/swift.json.golden",
 		},
 		{
 			name: "cocoapods",
@@ -316,6 +328,16 @@ func TestRepository(t *testing.T) {
 			golden: "testdata/conda-cyclonedx.json.golden",
 		},
 		{
+			name: "pom.xml generating CycloneDX SBOM (with vulnerabilities)",
+			args: args{
+				command: "fs",
+				scanner: types.VulnerabilityScanner,
+				format:  "cyclonedx",
+				input:   "testdata/fixtures/repo/pom",
+			},
+			golden: "testdata/pom-cyclonedx.json.golden",
+		},
+		{
 			name: "conda generating SPDX SBOM",
 			args: args{
 				command: "rootfs",
@@ -367,7 +389,7 @@ func TestRepository(t *testing.T) {
 				command = tt.args.command
 			}
 
-			format := "json"
+			format := types.FormatJSON
 			if tt.args.format != "" {
 				format = tt.args.format
 			}
@@ -380,7 +402,7 @@ func TestRepository(t *testing.T) {
 				"--skip-db-update",
 				"--skip-policy-update",
 				"--format",
-				format,
+				string(format),
 				"--offline-scan",
 			}
 
@@ -458,17 +480,20 @@ func TestRepository(t *testing.T) {
 			osArgs = append(osArgs, "--output", outputFile)
 			osArgs = append(osArgs, tt.args.input)
 
+			clock.SetFakeTime(t, time.Date(2020, 9, 10, 14, 20, 30, 5, time.UTC))
+			uuid.SetFakeUUID(t, "3ff14136-e09f-4df9-80ea-%012d")
+
 			// Run "trivy repo"
 			err := execute(osArgs)
 			require.NoError(t, err)
 
 			// Compare want and got
 			switch format {
-			case "cyclonedx":
+			case types.FormatCycloneDX:
 				compareCycloneDX(t, tt.golden, outputFile)
-			case "spdx-json":
-				compareSpdxJson(t, tt.golden, outputFile)
-			case "json":
+			case types.FormatSPDXJSON:
+				compareSPDXJson(t, tt.golden, outputFile)
+			case types.FormatJSON:
 				compareReports(t, tt.golden, outputFile, tt.override)
 			default:
 				require.Fail(t, "invalid format", "format: %s", format)

@@ -41,6 +41,7 @@ trivy kubernetes [flags] { cluster | all | specific resources like kubectl. eg: 
       --download-db-only                  download/update vulnerability database but don't run a scan
       --download-java-db-only             download/update Java index database but don't run a scan
       --exclude-nodes strings             indicate the node labels that the node-collector job should exclude from scanning (example: kubernetes.io/arch:arm64,team:dev)
+      --exclude-owned                     exclude resources that have an owner reference
       --exit-code int                     specify exit code when any security issues are found
       --file-patterns strings             specify config file patterns
   -f, --format string                     format (table,json,cyclonedx) (default "table")
@@ -82,8 +83,8 @@ trivy kubernetes [flags] { cluster | all | specific resources like kubectl. eg: 
       --secret-config string              specify a path to config file for secret scanning (default "trivy-secret.yaml")
   -s, --severity strings                  severities of security issues to be displayed (UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL) (default [UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL])
       --skip-db-update                    skip updating vulnerability database
-      --skip-dirs strings                 specify the directories where the traversal is skipped
-      --skip-files strings                specify the file paths to skip traversal
+      --skip-dirs strings                 specify the directories or glob patterns to skip
+      --skip-files strings                specify the files or glob patterns to skip
       --skip-java-db-update               skip updating Java index database
       --skip-policy-update                skip fetching rego policy updates
       --slow                              scan over time with lower CPU and memory utilization

@@ -37,9 +37,9 @@ func WithOCIArtifact(art *oci.Artifact) Option {
 }
 
 // WithClock takes a clock
-func WithClock(clock clock.Clock) Option {
+func WithClock(c clock.Clock) Option {
 	return func(opts *options) {
-		opts.clock = clock
+		opts.clock = c
 	}
 }
 
@@ -58,6 +58,13 @@ type Client struct {
 type Metadata struct {
 	Digest       string
 	DownloadedAt time.Time
+}
+
+func (m Metadata) String() string {
+	return fmt.Sprintf(`Policy Bundle:
+  Digest: %s
+  DownloadedAt: %s
+`, m.Digest, m.DownloadedAt.UTC())
 }
 
 // NewClient is the factory method for policy client

@@ -1,9 +1,9 @@
 ## trivy repository
 
-Scan a remote repository
+Scan a repository
 
 ```
-trivy repository [flags] REPO_URL
+trivy repository [flags] (REPO_PATH | REPO_URL)
 ```
 
 ### Examples
@@ -11,6 +11,8 @@ trivy repository [flags] REPO_URL
 ```
   # Scan your remote git repository
   $ trivy repo https://github.com/knqyf263/trivy-ci-test
+  # Scan your local git repository
+  $ trivy repo /path/to/your/repository
 ```
 
 ### Options
@@ -69,8 +71,8 @@ trivy repository [flags] REPO_URL
       --server string                     server address in client mode
   -s, --severity strings                  severities of security issues to be displayed (UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL) (default [UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL])
       --skip-db-update                    skip updating vulnerability database
-      --skip-dirs strings                 specify the directories where the traversal is skipped
-      --skip-files strings                specify the file paths to skip traversal
+      --skip-dirs strings                 specify the directories or glob patterns to skip
+      --skip-files strings                specify the files or glob patterns to skip
       --skip-java-db-update               skip updating Java index database
       --skip-policy-update                skip fetching rego policy updates
       --slow                              scan over time with lower CPU and memory utilization

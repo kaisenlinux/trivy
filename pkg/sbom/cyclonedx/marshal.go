@@ -50,9 +50,9 @@ type Marshaler struct {
 	core *core.CycloneDX
 }
 
-func NewMarshaler(version string, opts ...core.Option) *Marshaler {
+func NewMarshaler(version string) *Marshaler {
 	return &Marshaler{
-		core: core.NewCycloneDX(version, opts...),
+		core: core.NewCycloneDX(version),
 	}
 }
 
@@ -166,7 +166,7 @@ func (e *Marshaler) marshalPackages(metadata types.Metadata, result types.Result
 		}
 
 		// Recursive packages from direct dependencies
-		if component, err := e.marshalPackage(pkg, pkgs, map[string]*core.Component{}); err != nil {
+		if component, err := e.marshalPackage(pkg, pkgs, make(map[string]*core.Component)); err != nil {
 			return nil, nil
 		} else if component != nil {
 			directComponents = append(directComponents, component)
@@ -178,7 +178,7 @@ func (e *Marshaler) marshalPackages(metadata types.Metadata, result types.Result
 
 type Package struct {
 	ftypes.Package
-	Type            string
+	Type            ftypes.TargetType
 	Metadata        types.Metadata
 	Vulnerabilities []types.DetectedVulnerability
 }
@@ -217,7 +217,10 @@ func (e *Marshaler) rootComponent(r types.Report) (*core.Component, error) {
 	}
 
 	props := []core.Property{
-		{Name: PropertySchemaVersion, Value: strconv.Itoa(r.SchemaVersion)},
+		{
+			Name:  PropertySchemaVersion,
+			Value: strconv.Itoa(r.SchemaVersion),
+		},
 	}
 
 	switch r.ArtifactType {
@@ -276,8 +279,14 @@ func (e *Marshaler) resultComponent(r types.Result, osFound *ftypes.OS) *core.Co
 	component := &core.Component{
 		Name: r.Target,
 		Properties: []core.Property{
-			{Name: PropertyType, Value: r.Type},
-			{Name: PropertyClass, Value: string(r.Class)},
+			{
+				Name:  PropertyType,
+				Value: string(r.Type),
+			},
+			{
+				Name:  PropertyClass,
+				Value: string(r.Class),
+			},
 		},
 	}
 
@@ -286,7 +295,7 @@ func (e *Marshaler) resultComponent(r types.Result, osFound *ftypes.OS) *core.Co
 		// UUID needs to be generated since Operating System Component cannot generate PURL.
 		// https://cyclonedx.org/use-cases/#known-vulnerabilities
 		if osFound != nil {
-			component.Name = osFound.Family
+			component.Name = string(osFound.Family)
 			component.Version = osFound.Name
 		}
 		component.Type = cdx.ComponentTypeOS
@@ -314,16 +323,46 @@ func pkgComponent(pkg Package) (*core.Component, error) {
 	}
 
 	properties := []core.Property{
-		{Name: PropertyPkgID, Value: pkg.ID},
-		{Name: PropertyPkgType, Value: pkg.Type},
-		{Name: PropertyFilePath, Value: pkg.FilePath},
-		{Name: PropertySrcName, Value: pkg.SrcName},
-		{Name: PropertySrcVersion, Value: pkg.SrcVersion},
-		{Name: PropertySrcRelease, Value: pkg.SrcRelease},
-		{Name: PropertySrcEpoch, Value: strconv.Itoa(pkg.SrcEpoch)},
-		{Name: PropertyModularitylabel, Value: pkg.Modularitylabel},
-		{Name: PropertyLayerDigest, Value: pkg.Layer.Digest},
-		{Name: PropertyLayerDiffID, Value: pkg.Layer.DiffID},
+		{
+			Name:  PropertyPkgID,
+			Value: pkg.ID,
+		},
+		{
+			Name:  PropertyPkgType,
+			Value: string(pkg.Type),
+		},
+		{
+			Name:  PropertyFilePath,
+			Value: pkg.FilePath,
+		},
+		{
+			Name:  PropertySrcName,
+			Value: pkg.SrcName,
+		},
+		{
+			Name:  PropertySrcVersion,
+			Value: pkg.SrcVersion,
+		},
+		{
+			Name:  PropertySrcRelease,
+			Value: pkg.SrcRelease,
+		},
+		{
+			Name:  PropertySrcEpoch,
+			Value: strconv.Itoa(pkg.SrcEpoch),
+		},
+		{
+			Name:  PropertyModularitylabel,
+			Value: pkg.Modularitylabel,
+		},
+		{
+			Name:  PropertyLayerDigest,
+			Value: pkg.Layer.Digest,
+		},
+		{
+			Name:  PropertyLayerDiffID,
+			Value: pkg.Layer.DiffID,
+		},
 	}
 
 	return &core.Component{

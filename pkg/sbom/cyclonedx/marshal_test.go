@@ -1,28 +1,23 @@
 package cyclonedx_test
 
 import (
-	"fmt"
 	"testing"
 	"time"
 
-	"github.com/aquasecurity/trivy/pkg/sbom/cyclonedx/core"
-
-	"github.com/aquasecurity/trivy/pkg/sbom/cyclonedx"
-
 	cdx "github.com/CycloneDX/cyclonedx-go"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
-	"github.com/google/uuid"
 	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	fake "k8s.io/utils/clock/testing"
 
 	dtypes "github.com/aquasecurity/trivy-db/pkg/types"
 	"github.com/aquasecurity/trivy-db/pkg/vulnsrc/vulnerability"
-	fos "github.com/aquasecurity/trivy/pkg/fanal/analyzer/os"
+	"github.com/aquasecurity/trivy/pkg/clock"
 	ftypes "github.com/aquasecurity/trivy/pkg/fanal/types"
 	"github.com/aquasecurity/trivy/pkg/report"
+	"github.com/aquasecurity/trivy/pkg/sbom/cyclonedx"
 	"github.com/aquasecurity/trivy/pkg/types"
+	"github.com/aquasecurity/trivy/pkg/uuid"
 )
 
 func TestMarshaler_Marshal(t *testing.T) {
@@ -40,7 +35,7 @@ func TestMarshaler_Marshal(t *testing.T) {
 				Metadata: types.Metadata{
 					Size: 1024,
 					OS: &ftypes.OS{
-						Family: fos.CentOS,
+						Family: ftypes.CentOS,
 						Name:   "8.3.2011",
 						Eosl:   true,
 					},
@@ -56,7 +51,7 @@ func TestMarshaler_Marshal(t *testing.T) {
 					{
 						Target: "rails:latest (centos 8.3.2011)",
 						Class:  types.ClassOSPkg,
-						Type:   fos.CentOS,
+						Type:   ftypes.CentOS,
 						Packages: []ftypes.Package{
 							{
 								ID:              "binutils@2.30-93.el8",
@@ -111,10 +106,6 @@ func TestMarshaler_Marshal(t *testing.T) {
 											V3Vector: "CVSS:3.0/AV:L/AC:L/PR:L/UI:N/S:U/C:L/I:L/A:L",
 											V3Score:  5.3,
 										},
-									},
-									References: []string{
-										"http://lists.opensuse.org/opensuse-security-announce/2019-10/msg00072.html",
-										"http://lists.opensuse.org/opensuse-security-announce/2019-11/msg00008.html",
 									},
 									PublishedDate:    lo.ToPtr(time.Date(2018, 12, 31, 19, 29, 0, 0, time.UTC)),
 									LastModifiedDate: lo.ToPtr(time.Date(2019, 10, 31, 1, 15, 0, 0, time.UTC)),
@@ -199,8 +190,8 @@ func TestMarshaler_Marshal(t *testing.T) {
 					},
 					Component: &cdx.Component{
 						Type:       cdx.ComponentTypeContainer,
-						BOMRef:     "pkg:oci/rails@sha256:a27fd8080b517143cbbbab9dfb7c8571c40d67d534bbdee55bd6c473f432b177?repository_url=index.docker.io%2Flibrary%2Frails&arch=arm64",
-						PackageURL: "pkg:oci/rails@sha256:a27fd8080b517143cbbbab9dfb7c8571c40d67d534bbdee55bd6c473f432b177?repository_url=index.docker.io%2Flibrary%2Frails&arch=arm64",
+						BOMRef:     "pkg:oci/rails@sha256%3Aa27fd8080b517143cbbbab9dfb7c8571c40d67d534bbdee55bd6c473f432b177?arch=arm64&repository_url=index.docker.io%2Flibrary%2Frails",
+						PackageURL: "pkg:oci/rails@sha256%3Aa27fd8080b517143cbbbab9dfb7c8571c40d67d534bbdee55bd6c473f432b177?arch=arm64&repository_url=index.docker.io%2Flibrary%2Frails",
 						Name:       "rails:latest",
 						Properties: &[]cdx.Property{
 							{
@@ -381,7 +372,11 @@ func TestMarshaler_Marshal(t *testing.T) {
 						Name:    "binutils",
 						Version: "2.30-93.el8",
 						Licenses: &cdx.Licenses{
-							cdx.LicenseChoice{Expression: "GPLv3+"},
+							cdx.LicenseChoice{
+								License: &cdx.License{
+									Name: "GPLv3+",
+								},
+							},
 						},
 						PackageURL: "pkg:rpm/centos/binutils@2.30-93.el8?arch=aarch64&distro=centos-8.3.2011",
 						Supplier: &cdx.OrganizationalEntity{
@@ -468,7 +463,7 @@ func TestMarshaler_Marshal(t *testing.T) {
 						Dependencies: lo.ToPtr([]string{}),
 					},
 					{
-						Ref: "pkg:oci/rails@sha256:a27fd8080b517143cbbbab9dfb7c8571c40d67d534bbdee55bd6c473f432b177?repository_url=index.docker.io%2Flibrary%2Frails&arch=arm64",
+						Ref: "pkg:oci/rails@sha256%3Aa27fd8080b517143cbbbab9dfb7c8571c40d67d534bbdee55bd6c473f432b177?arch=arm64&repository_url=index.docker.io%2Flibrary%2Frails",
 						Dependencies: &[]string{
 							"3ff14136-e09f-4df9-80ea-000000000002",
 							"3ff14136-e09f-4df9-80ea-000000000003",
@@ -525,16 +520,8 @@ func TestMarshaler_Marshal(t *testing.T) {
 							416,
 						},
 						Description: "In GNU Binutils 2.31.1, there is a use-after-free in the error function in elfcomm.c when called from the process_archive function in readelf.c via a crafted ELF file.",
-						Advisories: &[]cdx.Advisory{
-							{
-								URL: "http://lists.opensuse.org/opensuse-security-announce/2019-10/msg00072.html",
-							},
-							{
-								URL: "http://lists.opensuse.org/opensuse-security-announce/2019-11/msg00008.html",
-							},
-						},
-						Published: "2018-12-31T19:29:00+00:00",
-						Updated:   "2019-10-31T01:15:00+00:00",
+						Published:   "2018-12-31T19:29:00+00:00",
+						Updated:     "2019-10-31T01:15:00+00:00",
 						Affects: &[]cdx.Affects{
 							{
 								Ref: "pkg:rpm/centos/binutils@2.30-93.el8?arch=aarch64&distro=centos-8.3.2011",
@@ -559,7 +546,7 @@ func TestMarshaler_Marshal(t *testing.T) {
 				Metadata: types.Metadata{
 					Size: 1024,
 					OS: &ftypes.OS{
-						Family: fos.CentOS,
+						Family: ftypes.CentOS,
 						Name:   "8.3.2011",
 						Eosl:   true,
 					},
@@ -574,7 +561,7 @@ func TestMarshaler_Marshal(t *testing.T) {
 					{
 						Target: "centos:latest (centos 8.3.2011)",
 						Class:  types.ClassOSPkg,
-						Type:   fos.CentOS,
+						Type:   ftypes.CentOS,
 						Packages: []ftypes.Package{
 							{
 								ID:              "acl@2.2.53-1.el8",
@@ -771,7 +758,7 @@ func TestMarshaler_Marshal(t *testing.T) {
 					{
 						BOMRef:  "3ff14136-e09f-4df9-80ea-000000000003",
 						Type:    cdx.ComponentTypeOS,
-						Name:    fos.CentOS,
+						Name:    string(ftypes.CentOS),
 						Version: "8.3.2011",
 						Properties: &[]cdx.Property{
 							{
@@ -835,14 +822,18 @@ func TestMarshaler_Marshal(t *testing.T) {
 						},
 					},
 					{
-						BOMRef:  "pkg:rpm/centos/acl@2.2.53-1.el8?arch=aarch64&epoch=1&distro=centos-8.3.2011",
+						BOMRef:  "pkg:rpm/centos/acl@2.2.53-1.el8?arch=aarch64&distro=centos-8.3.2011&epoch=1",
 						Type:    cdx.ComponentTypeLibrary,
 						Name:    "acl",
 						Version: "2.2.53-1.el8",
 						Licenses: &cdx.Licenses{
-							cdx.LicenseChoice{Expression: "GPLv2+"},
+							cdx.LicenseChoice{
+								License: &cdx.License{
+									Name: "GPLv2+",
+								},
+							},
 						},
-						PackageURL: "pkg:rpm/centos/acl@2.2.53-1.el8?arch=aarch64&epoch=1&distro=centos-8.3.2011",
+						PackageURL: "pkg:rpm/centos/acl@2.2.53-1.el8?arch=aarch64&distro=centos-8.3.2011&epoch=1",
 						Properties: &[]cdx.Property{
 							{
 								Name:  "aquasecurity:trivy:PkgID",
@@ -882,7 +873,11 @@ func TestMarshaler_Marshal(t *testing.T) {
 						Name:    "glibc",
 						Version: "2.28-151.el8",
 						Licenses: &cdx.Licenses{
-							cdx.LicenseChoice{Expression: "GPLv2+"},
+							cdx.LicenseChoice{
+								License: &cdx.License{
+									Name: "GPLv2+",
+								},
+							},
 						},
 						PackageURL: "pkg:rpm/centos/glibc@2.28-151.el8?arch=aarch64&distro=centos-8.3.2011",
 						Properties: &[]cdx.Property{
@@ -927,7 +922,7 @@ func TestMarshaler_Marshal(t *testing.T) {
 					{
 						Ref: "3ff14136-e09f-4df9-80ea-000000000003",
 						Dependencies: &[]string{
-							"pkg:rpm/centos/acl@2.2.53-1.el8?arch=aarch64&epoch=1&distro=centos-8.3.2011",
+							"pkg:rpm/centos/acl@2.2.53-1.el8?arch=aarch64&distro=centos-8.3.2011&epoch=1",
 							// Trivy is unable to identify the direct OS packages as of today.
 							"pkg:rpm/centos/glibc@2.28-151.el8?arch=aarch64&distro=centos-8.3.2011",
 						},
@@ -941,7 +936,7 @@ func TestMarshaler_Marshal(t *testing.T) {
 						Dependencies: lo.ToPtr([]string{}),
 					},
 					{
-						Ref: "pkg:rpm/centos/acl@2.2.53-1.el8?arch=aarch64&epoch=1&distro=centos-8.3.2011",
+						Ref: "pkg:rpm/centos/acl@2.2.53-1.el8?arch=aarch64&distro=centos-8.3.2011&epoch=1",
 						Dependencies: &[]string{
 							"pkg:rpm/centos/glibc@2.28-151.el8?arch=aarch64&distro=centos-8.3.2011",
 						},
@@ -1484,7 +1479,11 @@ func TestMarshaler_Marshal(t *testing.T) {
 						Version:    "0.20.1",
 						PackageURL: "pkg:npm/ruby-typeprof@0.20.1",
 						Licenses: &cdx.Licenses{
-							cdx.LicenseChoice{Expression: "MIT"},
+							cdx.LicenseChoice{
+								License: &cdx.License{
+									Name: "MIT",
+								},
+							},
 						},
 						Properties: &[]cdx.Property{
 							{
@@ -1569,17 +1568,12 @@ func TestMarshaler_Marshal(t *testing.T) {
 		},
 	}
 
-	clock := fake.NewFakeClock(time.Date(2021, 8, 25, 12, 20, 30, 5, time.UTC))
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var count int
-			newUUID := func() uuid.UUID {
-				count++
-				return uuid.Must(uuid.Parse(fmt.Sprintf("3ff14136-e09f-4df9-80ea-%012d", count)))
-			}
+			clock.SetFakeTime(t, time.Date(2021, 8, 25, 12, 20, 30, 5, time.UTC))
+			uuid.SetFakeUUID(t, "3ff14136-e09f-4df9-80ea-%012d")
 
-			marshaler := cyclonedx.NewMarshaler("dev", core.WithClock(clock), core.WithNewUUID(newUUID))
+			marshaler := cyclonedx.NewMarshaler("dev")
 			got, err := marshaler.Marshal(tt.inputReport)
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, got)

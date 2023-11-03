@@ -2,7 +2,7 @@ Source: trivy
 Section: admin
 Priority: optional
 Maintainer: Kevin Chevreuil - Kaisen <kaisen@kaisenlinux.org>
-Build-Depends: debhelper-compat (= 13), dh-golang, golang-go (>= 1.19)
+Build-Depends: debhelper-compat (= 13), dh-golang, golang-go (>= 1.20)
 Standards-Version: 4.6.0
 Homepage: https://aquasecurity.github.io/trivy
 Vcs-Browser: https://gitlab.com/kaisenlinux/packages/trivy
