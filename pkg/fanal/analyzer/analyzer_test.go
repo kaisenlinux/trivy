@@ -3,6 +3,7 @@ package analyzer_test
 import (
 	"context"
 	"fmt"
+	"github.com/google/go-containerregistry/pkg/name"
 	"os"
 	"sync"
 	"testing"
@@ -12,11 +13,11 @@ import (
 	"golang.org/x/sync/semaphore"
 	"golang.org/x/xerrors"
 
-	dio "github.com/aquasecurity/go-dep-parser/pkg/io"
 	"github.com/aquasecurity/trivy/pkg/fanal/analyzer"
 	"github.com/aquasecurity/trivy/pkg/fanal/types"
 	"github.com/aquasecurity/trivy/pkg/javadb"
 	"github.com/aquasecurity/trivy/pkg/mapfs"
+	xio "github.com/aquasecurity/trivy/pkg/x/io"
 
 	_ "github.com/aquasecurity/trivy/pkg/fanal/analyzer/imgconf/apk"
 	_ "github.com/aquasecurity/trivy/pkg/fanal/analyzer/language/java/jar"
@@ -343,6 +344,10 @@ func TestAnalyzerGroup_AnalyzeFile(t *testing.T) {
 								Licenses:   []string{"MIT"},
 								Arch:       "x86_64",
 								Digest:     "sha1:cb2316a189ebee5282c4a9bd98794cc2477a74c6",
+								InstalledFiles: []string{
+									"lib/libc.musl-x86_64.so.1",
+									"lib/ld-musl-x86_64.so.1",
+								},
 							},
 						},
 					},
@@ -375,10 +380,11 @@ func TestAnalyzerGroup_AnalyzeFile(t *testing.T) {
 						FilePath: "/app/Gemfile.lock",
 						Libraries: types.Packages{
 							{
-								ID:       "actioncable@5.2.3",
-								Name:     "actioncable",
-								Version:  "5.2.3",
-								Indirect: false,
+								ID:           "actioncable@5.2.3",
+								Name:         "actioncable",
+								Version:      "5.2.3",
+								Indirect:     false,
+								Relationship: types.RelationshipDirect,
 								DependsOn: []string{
 									"actionpack@5.2.3",
 								},
@@ -390,10 +396,11 @@ func TestAnalyzerGroup_AnalyzeFile(t *testing.T) {
 								},
 							},
 							{
-								ID:       "actionpack@5.2.3",
-								Name:     "actionpack",
-								Version:  "5.2.3",
-								Indirect: true,
+								ID:           "actionpack@5.2.3",
+								Name:         "actionpack",
+								Version:      "5.2.3",
+								Indirect:     true,
+								Relationship: types.RelationshipIndirect,
 								Locations: []types.Location{
 									{
 										StartLine: 6,
@@ -436,10 +443,11 @@ func TestAnalyzerGroup_AnalyzeFile(t *testing.T) {
 						FilePath: "/app/Gemfile-dev.lock",
 						Libraries: types.Packages{
 							{
-								ID:       "actioncable@5.2.3",
-								Name:     "actioncable",
-								Version:  "5.2.3",
-								Indirect: false,
+								ID:           "actioncable@5.2.3",
+								Name:         "actioncable",
+								Version:      "5.2.3",
+								Indirect:     false,
+								Relationship: types.RelationshipDirect,
 								DependsOn: []string{
 									"actionpack@5.2.3",
 								},
@@ -451,10 +459,11 @@ func TestAnalyzerGroup_AnalyzeFile(t *testing.T) {
 								},
 							},
 							{
-								ID:       "actionpack@5.2.3",
-								Name:     "actionpack",
-								Version:  "5.2.3",
-								Indirect: true,
+								ID:           "actionpack@5.2.3",
+								Name:         "actionpack",
+								Version:      "5.2.3",
+								Indirect:     true,
+								Relationship: types.RelationshipIndirect,
 								Locations: []types.Location{
 									{
 										StartLine: 6,
@@ -524,7 +533,7 @@ func TestAnalyzerGroup_AnalyzeFile(t *testing.T) {
 
 			ctx := context.Background()
 			err = a.AnalyzeFile(ctx, &wg, limit, got, "", tt.args.filePath, info,
-				func() (dio.ReadSeekCloserAt, error) {
+				func() (xio.ReadSeekCloserAt, error) {
 					if tt.args.testFilePath == "testdata/error" {
 						return nil, xerrors.New("error")
 					} else if tt.args.testFilePath == "testdata/no-permission" {
@@ -614,7 +623,9 @@ func TestAnalyzerGroup_PostAnalyze(t *testing.T) {
 
 			if tt.analyzerType == analyzer.TypeJar {
 				// init java-trivy-db with skip update
-				javadb.Init("./language/java/jar/testdata", "ghcr.io/aquasecurity/trivy-java-db", true, false, types.RegistryOptions{Insecure: false})
+				repo, err := name.NewTag(javadb.DefaultRepository)
+				require.NoError(t, err)
+				javadb.Init("./language/java/jar/testdata", repo, true, false, types.RegistryOptions{Insecure: false})
 			}
 
 			ctx := context.Background()

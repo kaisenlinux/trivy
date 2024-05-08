@@ -21,15 +21,18 @@ import (
 	spdxjson "github.com/spdx/tools-golang/json"
 	"github.com/spdx/tools-golang/spdx"
 	"github.com/spdx/tools-golang/spdxlib"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/xeipuuv/gojsonschema"
 
 	"github.com/aquasecurity/trivy-db/pkg/db"
 	"github.com/aquasecurity/trivy-db/pkg/metadata"
+	"github.com/aquasecurity/trivy/pkg/clock"
 	"github.com/aquasecurity/trivy/pkg/commands"
 	"github.com/aquasecurity/trivy/pkg/dbtest"
 	"github.com/aquasecurity/trivy/pkg/types"
+	"github.com/aquasecurity/trivy/pkg/uuid"
 
 	_ "modernc.org/sqlite"
 )
@@ -189,21 +192,82 @@ func readSpdxJson(t *testing.T, filePath string) *spdx.Document {
 	return bom
 }
 
+type OverrideFunc func(t *testing.T, want, got *types.Report)
+type runOptions struct {
+	wantErr  string
+	override OverrideFunc
+	fakeUUID string
+}
+
+// runTest runs Trivy with the given args and compares the output with the golden file.
+// If outputFile is empty, the output file is created in a temporary directory.
+// If update is true, the golden file is updated.
+func runTest(t *testing.T, osArgs []string, wantFile, outputFile string, format types.Format, opts runOptions) {
+	if opts.fakeUUID != "" {
+		uuid.SetFakeUUID(t, opts.fakeUUID)
+	}
+
+	if outputFile == "" {
+		// Set up the output file
+		outputFile = filepath.Join(t.TempDir(), "output.json")
+		if *update && opts.override == nil {
+			outputFile = wantFile
+		}
+	}
+	osArgs = append(osArgs, "--output", outputFile)
+
+	// Run Trivy
+	err := execute(osArgs)
+	if opts.wantErr != "" {
+		require.ErrorContains(t, err, opts.wantErr)
+		return
+	}
+	require.NoError(t, err)
+
+	// Compare want and got
+	switch format {
+	case types.FormatCycloneDX:
+		compareCycloneDX(t, wantFile, outputFile)
+	case types.FormatSPDXJSON:
+		compareSPDXJson(t, wantFile, outputFile)
+	case types.FormatJSON:
+		compareReports(t, wantFile, outputFile, opts.override)
+	case types.FormatTemplate, types.FormatSarif, types.FormatGitHub:
+		compareRawFiles(t, wantFile, outputFile)
+	default:
+		require.Fail(t, "invalid format", "format: %s", format)
+	}
+}
+
 func execute(osArgs []string) error {
+	// viper.XXX() (e.g. viper.ReadInConfig()) affects the global state, so we need to reset it after each test.
+	defer viper.Reset()
+
+	// Set a fake time
+	ctx := clock.With(context.Background(), time.Date(2021, 8, 25, 12, 20, 30, 5, time.UTC))
+
 	// Setup CLI App
 	app := commands.NewApp()
 	app.SetOut(io.Discard)
+	app.SetArgs(osArgs)
 
 	// Run Trivy
-	app.SetArgs(osArgs)
-	return app.Execute()
+	return app.ExecuteContext(ctx)
 }
 
-func compareReports(t *testing.T, wantFile, gotFile string, override func(*types.Report)) {
+func compareRawFiles(t *testing.T, wantFile, gotFile string) {
+	want, err := os.ReadFile(wantFile)
+	require.NoError(t, err)
+	got, err := os.ReadFile(gotFile)
+	require.NoError(t, err)
+	assert.EqualValues(t, string(want), string(got))
+}
+
+func compareReports(t *testing.T, wantFile, gotFile string, override func(t *testing.T, want, got *types.Report)) {
 	want := readReport(t, wantFile)
 	got := readReport(t, gotFile)
 	if override != nil {
-		override(&want)
+		override(t, &want, &got)
 	}
 	assert.Equal(t, want, got)
 }
@@ -242,5 +306,35 @@ func validateReport(t *testing.T, schema string, report any) {
 			return err.String()
 		})
 		assert.True(t, valid, strings.Join(errs, "\n"))
+	}
+}
+
+func overrideFuncs(funcs ...OverrideFunc) OverrideFunc {
+	return func(t *testing.T, want, got *types.Report) {
+		for _, f := range funcs {
+			if f == nil {
+				continue
+			}
+			f(t, want, got)
+		}
+	}
+}
+
+// overrideUID only checks for the presence of the package UID and clears the UID;
+// the UID is calculated from the package metadata, but the UID does not match
+// as it varies slightly depending on the mode of scanning, e.g. the digest of the layer.
+func overrideUID(t *testing.T, want, got *types.Report) {
+	for i, result := range got.Results {
+		for j, vuln := range result.Vulnerabilities {
+			assert.NotEmptyf(t, vuln.PkgIdentifier.UID, "UID is empty: %s", vuln.VulnerabilityID)
+			// Do not compare UID as the package metadata is slightly different between the tests,
+			// causing different UIDs.
+			got.Results[i].Vulnerabilities[j].PkgIdentifier.UID = ""
+		}
+	}
+	for i, result := range want.Results {
+		for j := range result.Vulnerabilities {
+			want.Results[i].Vulnerabilities[j].PkgIdentifier.UID = ""
+		}
 	}
 }

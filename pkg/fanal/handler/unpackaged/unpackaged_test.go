@@ -2,6 +2,7 @@ package unpackaged_test
 
 import (
 	"context"
+	"github.com/package-url/packageurl-go"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -42,9 +43,18 @@ func Test_unpackagedHook_Handle(t *testing.T) {
 						FilePath: "go.mod",
 						Libraries: types.Packages{
 							{
+								ID:      "github.com/spf13/cobra@v1.5.0",
 								Name:    "github.com/spf13/cobra",
 								Version: "1.5.0",
-								Ref:     "pkg:golang/github.com/spf13/cobra@1.5.0",
+								Identifier: types.PkgIdentifier{
+									PURL: &packageurl.PackageURL{
+										Type:      packageurl.TypeGolang,
+										Namespace: "github.com/spf13",
+										Name:      "cobra",
+										Version:   "1.5.0",
+									},
+									BOMRef: "pkg:golang/github.com/spf13/cobra@1.5.0",
+								},
 							},
 						},
 					},
@@ -64,7 +74,7 @@ func Test_unpackagedHook_Handle(t *testing.T) {
 		},
 	}
 
-	require.NoError(t, log.InitLogger(false, true))
+	log.InitLogger(false, true)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ts := rekortest.NewServer(t)

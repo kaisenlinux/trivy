@@ -14,7 +14,7 @@ As for `--namespaces` option, the detail is described as below.
 If a file name matches the following file patterns, Trivy will parse the file and pass it as input to your Rego policy.
 
 | File format   | File pattern                                              |
-| ------------- | --------------------------------------------------------- |
+|---------------|-----------------------------------------------------------|
 | JSON          | `*.json`                                                  |
 | YAML          | `*.yaml` and `*.yml`                                      |
 | Dockerfile    | `Dockerfile`, `Dockerfile.*`, and `*.Dockerfile`          |
@@ -27,7 +27,7 @@ In the above general file formats, Trivy automatically identifies the following 
 - CloudFormation (JSON/YAML)
 - Kubernetes (JSON/YAML)
 - Helm (YAML)
-- Terraform Plan (JSON)
+- Terraform Plan (JSON/Snapshot)
 
 This is useful for filtering inputs, as described below.
 
@@ -101,9 +101,8 @@ In this case, `user.*` will be evaluated.
 Any package prefixes such as `main` and `user` are allowed.
 
 ### Metadata
-Metadata helps enrich Trivy's scan results with useful information.
 
-The annotation format is described in the [OPA documentation](https://www.openpolicyagent.org/docs/latest/annotations/).
+The check must contain a [Rego Metadata](https://www.openpolicyagent.org/docs/latest/policy-language/#metadata) section. Trivy uses standard rego metadata to define the new policy and general information about it.
 
 Trivy supports extra fields in the `custom` section as described below.
 
@@ -125,7 +124,7 @@ schema that will be used is based on the input document type. It is recommended 
 correct and do not reference incorrect properties/values.
 
 | Field name                 | Allowed values                                                    |        Default value         |     In table     |     In JSON      |
-| -------------------------- | ----------------------------------------------------------------- | :--------------------------: | :--------------: | :--------------: |
+|----------------------------|-------------------------------------------------------------------|:----------------------------:|:----------------:|:----------------:|
 | title                      | Any characters                                                    |             N/A              | :material-check: | :material-check: |
 | description                | Any characters                                                    |                              | :material-close: | :material-check: |
 | schemas.input              | `schema["kubernetes"]`, `schema["dockerfile"]`, `schema["cloud"]` | (applied to all input types) | :material-close: | :material-close: |
@@ -201,4 +200,4 @@ See [here](schema.md) for the detail.
 
 [rego]: https://www.openpolicyagent.org/docs/latest/policy-language/
 [package]: https://www.openpolicyagent.org/docs/latest/policy-language/#packages
-[source-types]: https://github.com/aquasecurity/defsec/blob/418759b4dc97af25f30f32e0bd365be7984003a1/pkg/types/sources.go)
+[source-types]: https://github.com/aquasecurity/defsec/blob/418759b4dc97af25f30f32e0bd365be7984003a1/pkg/types/sources.go

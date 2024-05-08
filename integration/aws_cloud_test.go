@@ -4,16 +4,15 @@ package integration
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
-	awscommands "github.com/aquasecurity/trivy/pkg/cloud/aws/commands"
-	"github.com/aquasecurity/trivy/pkg/flag"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	testcontainers "github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/localstack"
+
+	"github.com/aquasecurity/trivy/internal/testutil"
+	awscommands "github.com/aquasecurity/trivy/pkg/cloud/aws/commands"
+	"github.com/aquasecurity/trivy/pkg/flag"
 )
 
 func TestAwsCommandRun(t *testing.T) {
@@ -26,7 +25,7 @@ func TestAwsCommandRun(t *testing.T) {
 		{
 			name: "fail without region",
 			options: flag.Options{
-				RegoOptions: flag.RegoOptions{SkipPolicyUpdate: true},
+				RegoOptions: flag.RegoOptions{SkipCheckUpdate: true},
 			},
 			envs: map[string]string{
 				"AWS_ACCESS_KEY_ID":     "test",
@@ -36,19 +35,23 @@ func TestAwsCommandRun(t *testing.T) {
 		},
 		{
 			name: "fail without creds",
+			envs: map[string]string{
+				"AWS_PROFILE": "non-existent-profile",
+			},
 			options: flag.Options{
-				RegoOptions: flag.RegoOptions{SkipPolicyUpdate: true},
+				RegoOptions: flag.RegoOptions{SkipCheckUpdate: true},
 				AWSOptions: flag.AWSOptions{
 					Region: "us-east-1",
 				},
 			},
-			wantErr: "failed to retrieve credentials",
+			wantErr: "non-existent-profile",
 		},
 	}
 
 	ctx := context.Background()
 
-	localstackC, addr := setupLocalStack(t, ctx)
+	localstackC, addr, err := testutil.SetupLocalStack(ctx, "2.2.0")
+	require.NoError(t, err)
 	defer localstackC.Terminate(ctx)
 
 	for _, tt := range tests {
@@ -57,7 +60,6 @@ func TestAwsCommandRun(t *testing.T) {
 			tt.options.AWSOptions.Endpoint = addr
 			tt.options.GlobalOptions.Timeout = time.Minute
 
-			t.Setenv("AWS_PROFILE", "non-existent-profile")
 			for k, v := range tt.envs {
 				t.Setenv(k, v)
 			}
@@ -72,31 +74,5 @@ func TestAwsCommandRun(t *testing.T) {
 			assert.NoError(t, err)
 		})
 	}
-
-}
-
-func setupLocalStack(t *testing.T, ctx context.Context) (*localstack.LocalStackContainer, string) {
-	t.Helper()
-
-	container, err := localstack.RunContainer(ctx, testcontainers.CustomizeRequest(
-		testcontainers.GenericContainerRequest{
-			ContainerRequest: testcontainers.ContainerRequest{
-				Image: "localstack/localstack:2.2.0",
-			},
-		},
-	))
-	require.NoError(t, err)
-
-	p, err := container.MappedPort(ctx, "4566/tcp")
-	require.NoError(t, err)
-
-	provider, err := testcontainers.NewDockerProvider()
-	require.NoError(t, err)
-	defer provider.Close()
-
-	host, err := provider.DaemonHost(ctx)
-	require.NoError(t, err)
-
-	return container, fmt.Sprintf("http://%s:%d", host, p.Int())
 
 }

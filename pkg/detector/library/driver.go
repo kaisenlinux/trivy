@@ -4,12 +4,14 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/samber/lo"
 	"golang.org/x/xerrors"
 
 	"github.com/aquasecurity/trivy-db/pkg/db"
 	dbTypes "github.com/aquasecurity/trivy-db/pkg/types"
 	"github.com/aquasecurity/trivy-db/pkg/vulnsrc/vulnerability"
 	"github.com/aquasecurity/trivy/pkg/detector/library/compare"
+	"github.com/aquasecurity/trivy/pkg/detector/library/compare/bitnami"
 	"github.com/aquasecurity/trivy/pkg/detector/library/compare/maven"
 	"github.com/aquasecurity/trivy/pkg/detector/library/compare/npm"
 	"github.com/aquasecurity/trivy/pkg/detector/library/compare/pep440"
@@ -43,7 +45,7 @@ func NewDriver(libType ftypes.LangType) (Driver, bool) {
 	case ftypes.Npm, ftypes.Yarn, ftypes.Pnpm, ftypes.NodePkg, ftypes.JavaScript:
 		ecosystem = vulnerability.Npm
 		comparer = npm.Comparer{}
-	case ftypes.NuGet, ftypes.DotNetCore:
+	case ftypes.NuGet, ftypes.DotNetCore, ftypes.PackagesProps:
 		ecosystem = vulnerability.NuGet
 		comparer = compare.GenericComparer{}
 	case ftypes.Pipenv, ftypes.Poetry, ftypes.Pip, ftypes.PythonPkg:
@@ -70,17 +72,18 @@ func NewDriver(libType ftypes.LangType) (Driver, bool) {
 		// https://guides.cocoapods.org/making/making-a-cocoapod.html#cocoapods-versioning-specifics
 		ecosystem = vulnerability.Cocoapods
 		comparer = rubygems.Comparer{}
-	case ftypes.CondaPkg:
-		log.Logger.Warn("Conda package is supported for SBOM, not for vulnerability scanning")
+	case ftypes.CondaPkg, ftypes.CondaEnv:
+		log.Warn("Conda package is supported for SBOM, not for vulnerability scanning")
 		return Driver{}, false
 	case ftypes.Bitnami:
 		ecosystem = vulnerability.Bitnami
-		comparer = compare.GenericComparer{}
+		comparer = bitnami.Comparer{}
 	case ftypes.K8sUpstream:
 		ecosystem = vulnerability.Kubernetes
 		comparer = compare.GenericComparer{}
 	default:
-		log.Logger.Warnf("The %q library type is not supported for vulnerability scanning", libType)
+		log.Warn("The library type is not supported for vulnerability scanning",
+			log.String("type", string(libType)))
 		return Driver{}, false
 	}
 	return Driver{
@@ -136,7 +139,7 @@ func (d *Driver) DetectVulnerabilities(pkgID, pkgName, pkgVer string) ([]types.D
 
 func createFixedVersions(advisory dbTypes.Advisory) string {
 	if len(advisory.PatchedVersions) != 0 {
-		return strings.Join(advisory.PatchedVersions, ", ")
+		return joinFixedVersions(advisory.PatchedVersions)
 	}
 
 	var fixedVersions []string
@@ -149,5 +152,9 @@ func createFixedVersions(advisory dbTypes.Advisory) string {
 			}
 		}
 	}
-	return strings.Join(fixedVersions, ", ")
+	return joinFixedVersions(fixedVersions)
+}
+
+func joinFixedVersions(fixedVersions []string) string {
+	return strings.Join(lo.Uniq(fixedVersions), ", ")
 }

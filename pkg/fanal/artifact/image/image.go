@@ -19,14 +19,15 @@ import (
 	"github.com/aquasecurity/trivy/pkg/fanal/cache"
 	"github.com/aquasecurity/trivy/pkg/fanal/handler"
 	"github.com/aquasecurity/trivy/pkg/fanal/image"
-	"github.com/aquasecurity/trivy/pkg/fanal/log"
 	"github.com/aquasecurity/trivy/pkg/fanal/types"
 	"github.com/aquasecurity/trivy/pkg/fanal/walker"
+	"github.com/aquasecurity/trivy/pkg/log"
 	"github.com/aquasecurity/trivy/pkg/parallel"
 	"github.com/aquasecurity/trivy/pkg/semaphore"
 )
 
 type Artifact struct {
+	logger         *log.Logger
 	image          types.Image
 	cache          cache.ArtifactCache
 	walker         walker.LayerTar
@@ -49,33 +50,21 @@ func NewArtifact(img types.Image, c cache.ArtifactCache, opt artifact.Option) (a
 		return nil, xerrors.Errorf("handler init error: %w", err)
 	}
 
-	a, err := analyzer.NewAnalyzerGroup(analyzer.AnalyzerOptions{
-		Group:                opt.AnalyzerGroup,
-		Slow:                 opt.Slow,
-		FilePatterns:         opt.FilePatterns,
-		DisabledAnalyzers:    opt.DisabledAnalyzers,
-		MisconfScannerOption: opt.MisconfScannerOption,
-		SecretScannerOption:  opt.SecretScannerOption,
-		LicenseScannerOption: opt.LicenseScannerOption,
-	})
+	a, err := analyzer.NewAnalyzerGroup(opt.AnalyzerOptions())
 	if err != nil {
 		return nil, xerrors.Errorf("analyzer group error: %w", err)
 	}
 
-	ca, err := analyzer.NewConfigAnalyzerGroup(analyzer.ConfigAnalyzerOptions{
-		FilePatterns:         opt.FilePatterns,
-		DisabledAnalyzers:    opt.DisabledAnalyzers,
-		MisconfScannerOption: opt.MisconfScannerOption,
-		SecretScannerOption:  opt.SecretScannerOption,
-	})
+	ca, err := analyzer.NewConfigAnalyzerGroup(opt.ConfigAnalyzerOptions())
 	if err != nil {
 		return nil, xerrors.Errorf("config analyzer group error: %w", err)
 	}
 
 	return Artifact{
+		logger:         log.WithPrefix("image"),
 		image:          img,
 		cache:          c,
-		walker:         walker.NewLayerTar(opt.SkipFiles, opt.SkipDirs, opt.Slow),
+		walker:         walker.NewLayerTar(opt.WalkerOption),
 		analyzer:       a,
 		configAnalyzer: ca,
 		handlerManager: handlerManager,
@@ -89,6 +78,7 @@ func (a Artifact) Inspect(ctx context.Context) (types.ArtifactReference, error) 
 	if err != nil {
 		return types.ArtifactReference{}, xerrors.Errorf("unable to get the image ID: %w", err)
 	}
+	a.logger.Debug("Detected image ID", log.String("image_id", imageID))
 
 	configFile, err := a.image.ConfigFile()
 	if err != nil {
@@ -96,10 +86,7 @@ func (a Artifact) Inspect(ctx context.Context) (types.ArtifactReference, error) 
 	}
 
 	diffIDs := a.diffIDs(configFile)
-
-	// Debug
-	log.Logger.Debugf("Image ID: %s", imageID)
-	log.Logger.Debugf("Diff IDs: %v", diffIDs)
+	a.logger.Debug("Detected diff ID", log.Any("diff_ids", diffIDs))
 
 	// Try retrieving a remote SBOM document
 	if res, err := a.retrieveRemoteSBOM(ctx); err == nil {
@@ -112,7 +99,7 @@ func (a Artifact) Inspect(ctx context.Context) (types.ArtifactReference, error) 
 
 	// Try to detect base layers.
 	baseDiffIDs := a.guessBaseLayers(diffIDs, configFile)
-	log.Logger.Debugf("Base Layers: %v", baseDiffIDs)
+	a.logger.Debug("Detected base layers", log.Any("diff_ids", baseDiffIDs))
 
 	// Convert image ID and layer IDs to cache keys
 	imageKey, layerKeys, err := a.calcCacheKeys(imageID, diffIDs)
@@ -130,7 +117,7 @@ func (a Artifact) Inspect(ctx context.Context) (types.ArtifactReference, error) 
 
 	missingImageKey := imageKey
 	if missingImage {
-		log.Logger.Debugf("Missing image ID in cache: %s", imageID)
+		a.logger.Debug("Missing image ID in cache", log.String("image_id", imageID))
 	} else {
 		missingImageKey = ""
 	}
@@ -215,8 +202,8 @@ func (a Artifact) inspect(ctx context.Context, missingImage string, layerKeys, b
 	layerKeyMap map[string]LayerInfo, configFile *v1.ConfigFile) error {
 
 	var osFound types.OS
-	workers := lo.Ternary(a.artifactOption.Slow, 1, 5)
-	p := parallel.NewPipeline(workers, false, layerKeys, func(ctx context.Context, layerKey string) (any, error) {
+	p := parallel.NewPipeline(a.artifactOption.Parallel, false, layerKeys, func(ctx context.Context,
+		layerKey string) (any, error) {
 		layer := layerKeyMap[layerKey]
 
 		// If it is a base layer, secret scanning should not be performed.
@@ -253,7 +240,7 @@ func (a Artifact) inspect(ctx context.Context, missingImage string, layerKeys, b
 }
 
 func (a Artifact) inspectLayer(ctx context.Context, layerInfo LayerInfo, disabled []analyzer.Type) (types.BlobInfo, error) {
-	log.Logger.Debugf("Missing diff ID in cache: %s", layerInfo.DiffID)
+	a.logger.Debug("Missing diff ID in cache", log.String("diff_id", layerInfo.DiffID))
 
 	layerDigest, rc, err := a.uncompressedLayer(layerInfo.DiffID)
 	if err != nil {
@@ -268,7 +255,7 @@ func (a Artifact) inspectLayer(ctx context.Context, layerInfo LayerInfo, disable
 		FileChecksum: a.artifactOption.FileChecksum,
 	}
 	result := analyzer.NewAnalysisResult()
-	limit := semaphore.New(a.artifactOption.Slow)
+	limit := semaphore.New(a.artifactOption.Parallel)
 
 	// Prepare filesystem for post analysis
 	composite, err := a.analyzer.PostAnalyzerFS()

@@ -21,12 +21,12 @@ const storageEBSCacheSize = 128
 // EBS represents an artifact for AWS EBS snapshots
 type EBS struct {
 	Storage
+	logger     *log.Logger
 	snapshotID string
 	ebs        ebsfile.EBSAPI
 }
 
 func newEBS(snapshotID string, vm Storage, region, endpoint string) (*EBS, error) {
-
 	ebs, err := ebsfile.New(context.TODO(), config.MakeAWSOptions(region, endpoint)...)
 	if err != nil {
 		return nil, xerrors.Errorf("new ebsfile error: %w", err)
@@ -34,6 +34,7 @@ func newEBS(snapshotID string, vm Storage, region, endpoint string) (*EBS, error
 
 	return &EBS{
 		Storage:    vm,
+		logger:     log.WithPrefix("ebs"),
 		snapshotID: snapshotID,
 		ebs:        ebs,
 	}, nil
@@ -108,7 +109,7 @@ func (a *EBS) calcCacheKey(key string) (string, error) {
 func (a *EBS) hasCache(cacheKey string) bool {
 	_, missingCacheKeys, err := a.cache.MissingBlobs(cacheKey, []string{cacheKey})
 	if err != nil {
-		log.Logger.Debugf("Unable to query missing cache: %s", err)
+		a.logger.Debug("Unable to query missing cache", log.Err(err))
 		return false
 	}
 
@@ -117,6 +118,6 @@ func (a *EBS) hasCache(cacheKey string) bool {
 		return true
 	}
 
-	log.Logger.Debugf("Missing virtual machine cache: %s", cacheKey)
+	a.logger.Debug("Missing virtual machine cache", log.String("key", cacheKey))
 	return false
 }

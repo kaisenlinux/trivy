@@ -9,13 +9,13 @@ import (
 
 	"golang.org/x/xerrors"
 
-	dio "github.com/aquasecurity/go-dep-parser/pkg/io"
-	"github.com/aquasecurity/go-dep-parser/pkg/java/jar"
+	"github.com/aquasecurity/trivy/pkg/dependency/parser/java/jar"
 	"github.com/aquasecurity/trivy/pkg/fanal/analyzer"
 	"github.com/aquasecurity/trivy/pkg/fanal/analyzer/language"
 	"github.com/aquasecurity/trivy/pkg/fanal/types"
 	"github.com/aquasecurity/trivy/pkg/javadb"
 	"github.com/aquasecurity/trivy/pkg/parallel"
+	xio "github.com/aquasecurity/trivy/pkg/x/io"
 )
 
 func init() {
@@ -33,12 +33,12 @@ var requiredExtensions = []string{
 
 // javaLibraryAnalyzer analyzes jar/war/ear/par files
 type javaLibraryAnalyzer struct {
-	slow bool
+	parallel int
 }
 
 func newJavaLibraryAnalyzer(options analyzer.AnalyzerOptions) (analyzer.PostAnalyzer, error) {
 	return &javaLibraryAnalyzer{
-		slow: options.Slow,
+		parallel: options.Parallel,
 	}, nil
 }
 
@@ -56,7 +56,7 @@ func (a *javaLibraryAnalyzer) PostAnalyze(ctx context.Context, input analyzer.Po
 	}
 
 	// It will be called on each JAR file
-	onFile := func(path string, info fs.FileInfo, r dio.ReadSeekerAt) (*types.Application, error) {
+	onFile := func(path string, info fs.FileInfo, r xio.ReadSeekerAt) (*types.Application, error) {
 		p := jar.NewParser(client, jar.WithSize(info.Size()), jar.WithFilePath(path))
 		return language.ParsePackage(types.Jar, path, r, p, input.Options.FileChecksum)
 	}
@@ -70,7 +70,7 @@ func (a *javaLibraryAnalyzer) PostAnalyze(ctx context.Context, input analyzer.Po
 		return nil
 	}
 
-	if err = parallel.WalkDir(ctx, input.FS, ".", a.slow, onFile, onResult); err != nil {
+	if err = parallel.WalkDir(ctx, input.FS, ".", a.parallel, onFile, onResult); err != nil {
 		return nil, xerrors.Errorf("walk dir error: %w", err)
 	}
 

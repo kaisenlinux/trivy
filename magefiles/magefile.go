@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -60,7 +61,7 @@ func (Tool) Wire() error {
 
 // GolangciLint installs golangci-lint
 func (Tool) GolangciLint() error {
-	const version = "v1.54.2"
+	const version = "v1.57.2"
 	if exists(filepath.Join(GOBIN, "golangci-lint")) {
 		return nil
 	}
@@ -74,14 +75,6 @@ func (Tool) Labeler() error {
 		return nil
 	}
 	return sh.Run("go", "install", "github.com/knqyf263/labeler@latest")
-}
-
-// EasyJSON installs easyjson
-func (Tool) EasyJSON() error {
-	if exists(filepath.Join(GOBIN, "easyjson")) {
-		return nil
-	}
-	return sh.Run("go", "install", "github.com/mailru/easyjson/...@v0.7.7")
 }
 
 // Kind installs kind cluster
@@ -108,7 +101,7 @@ func (Tool) Mockery() error {
 // Wire generates the wire_gen.go file for each package
 func Wire() error {
 	mg.Deps(Tool{}.Wire)
-	return sh.RunV("wire", "gen", "./pkg/commands/...", "./pkg/rpc/...")
+	return sh.RunV("wire", "gen", "./pkg/commands/...", "./pkg/rpc/...", "./pkg/k8s/...")
 }
 
 // Mock generates mocks
@@ -163,12 +156,6 @@ func Yacc() error {
 	return sh.Run("go", "generate", "./pkg/licensing/expression/...")
 }
 
-// Easyjson generates JSON marshaler/unmarshaler for TinyGo/WebAssembly as TinyGo doesn't support encoding/json.
-func Easyjson() error {
-	mg.Deps(Tool{}.EasyJSON)
-	return sh.Run("easyjson", "./pkg/module/serialize/types.go")
-}
-
 type Test mg.Namespace
 
 // FixtureContainerImages downloads and extracts required images
@@ -179,6 +166,11 @@ func (Test) FixtureContainerImages() error {
 // FixtureVMImages downloads and extracts required VM images
 func (Test) FixtureVMImages() error {
 	return fixtureVMImages()
+}
+
+// FixtureTerraformPlanSnapshots generates Terraform Plan files in test folders
+func (Test) FixtureTerraformPlanSnapshots() error {
+	return fixtureTerraformPlanSnapshots(context.TODO())
 }
 
 // GenerateModules compiles WASM modules for unit tests
@@ -266,6 +258,12 @@ func (t Test) Module() error {
 	return sh.RunWithV(ENV, "go", "test", "-v", "-tags=module_integration", "./integration/...")
 }
 
+// UpdateModuleGolden updates golden files for Wasm integration tests
+func (t Test) UpdateModuleGolden() error {
+	mg.Deps(t.FixtureContainerImages, t.GenerateExampleModules)
+	return sh.RunWithV(ENV, "go", "test", "-v", "-tags=module_integration", "./integration/...", "-update")
+}
+
 // VM runs VM integration tests
 func (t Test) VM() error {
 	mg.Deps(t.FixtureVMImages)
@@ -273,7 +271,8 @@ func (t Test) VM() error {
 }
 
 // UpdateVMGolden updates golden files for integration tests
-func (Test) UpdateVMGolden() error {
+func (t Test) UpdateVMGolden() error {
+	mg.Deps(t.FixtureVMImages)
 	return sh.RunWithV(ENV, "go", "test", "-v", "-tags=vm_integration", "./integration/...", "-update")
 }
 
@@ -417,4 +416,23 @@ func exists(filename string) bool {
 func installed(cmd string) bool {
 	_, err := exec.LookPath(cmd)
 	return err == nil
+}
+
+type Schema mg.Namespace
+
+// Generate generates Cloud Schema for misconfiguration scanning
+func (Schema) Generate() error {
+	return sh.RunWith(ENV, "go", "run", "-tags=mage_schema", "./magefiles", "--", "generate")
+}
+
+// Verify verifies Cloud Schema for misconfiguration scanning
+func (Schema) Verify() error {
+	return sh.RunWith(ENV, "go", "run", "-tags=mage_schema", "./magefiles", "--", "verify")
+}
+
+type CloudActions mg.Namespace
+
+// Generate generates the list of possible cloud actions with AWS
+func (CloudActions) Generate() error {
+	return sh.RunWith(ENV, "go", "run", "-tags=mage_cloudactions", "./magefiles")
 }

@@ -18,7 +18,7 @@ override_dh_auto_install:
 	install -p -m 0755 $(CURDIR)/trivy $(CURDIR)/debian/trivy/usr/bin/
 	install -p -m 0644 $(CURDIR)/debian/trivy.png $(CURDIR)/debian/trivy/usr/share/pixmaps/
 	install -p -m 0644 $(CURDIR)/contrib/*.tpl $(CURDIR)/debian/trivy/usr/share/trivy/templates/
-	$(CURDIR)/trivy completion bash > $(CURDIR)/debian/trivy/usr/share/bash-completion/completions/trivy
-	$(CURDIR)/trivy completion zsh > $(CURDIR)/debian/trivy/usr/share/zsh/vendor-completions/_trivy
+	$(CURDIR)/debian/trivy/usr/bin/trivy completion bash > $(CURDIR)/debian/trivy/usr/share/bash-completion/completions/trivy
+	$(CURDIR)/debian/trivy/usr/bin/trivy completion zsh > $(CURDIR)/debian/trivy/usr/share/zsh/vendor-completions/_trivy
 
 override_dh_dwz:
