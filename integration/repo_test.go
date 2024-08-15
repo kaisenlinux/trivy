@@ -4,12 +4,13 @@ package integration
 
 import (
 	"fmt"
-	"github.com/stretchr/testify/assert"
 	"os"
 	"strings"
 	"testing"
 
-	ftypes "github.com/aquasecurity/trivy/pkg/fanal/types"
+	"github.com/stretchr/testify/require"
+
+	"github.com/aquasecurity/trivy/pkg/fanal/artifact"
 	"github.com/aquasecurity/trivy/pkg/types"
 )
 
@@ -32,6 +33,7 @@ func TestRepository(t *testing.T) {
 		format         types.Format
 		includeDevDeps bool
 		parallel       int
+		vex            string
 	}
 	tests := []struct {
 		name     string
@@ -75,6 +77,24 @@ func TestRepository(t *testing.T) {
 			golden: "testdata/gomod.json.golden",
 		},
 		{
+			name: "gomod with local VEX file",
+			args: args{
+				scanner: types.VulnerabilityScanner,
+				input:   "testdata/fixtures/repo/gomod",
+				vex:     "testdata/fixtures/vex/file/openvex.json",
+			},
+			golden: "testdata/gomod-vex.json.golden",
+		},
+		{
+			name: "gomod with VEX repository",
+			args: args{
+				scanner: types.VulnerabilityScanner,
+				input:   "testdata/fixtures/repo/gomod",
+				vex:     "repo",
+			},
+			golden: "testdata/gomod-vex.json.golden",
+		},
+		{
 			name: "npm",
 			args: args{
 				scanner:     types.VulnerabilityScanner,
@@ -105,8 +125,9 @@ func TestRepository(t *testing.T) {
 		{
 			name: "pnpm",
 			args: args{
-				scanner: types.VulnerabilityScanner,
-				input:   "testdata/fixtures/repo/pnpm",
+				scanner:     types.VulnerabilityScanner,
+				input:       "testdata/fixtures/repo/pnpm",
+				listAllPkgs: true,
 			},
 			golden: "testdata/pnpm.json.golden",
 		},
@@ -152,6 +173,14 @@ func TestRepository(t *testing.T) {
 				input:   "testdata/fixtures/repo/gradle",
 			},
 			golden: "testdata/gradle.json.golden",
+		},
+		{
+			name: "sbt",
+			args: args{
+				scanner: types.VulnerabilityScanner,
+				input:   "testdata/fixtures/repo/sbt",
+			},
+			golden: "testdata/sbt.json.golden",
 		},
 		{
 			name: "conan",
@@ -233,6 +262,24 @@ func TestRepository(t *testing.T) {
 				input:       "testdata/fixtures/repo/composer",
 			},
 			golden: "testdata/composer.lock.json.golden",
+		},
+		{
+			name: "multiple lockfiles",
+			args: args{
+				scanner: types.VulnerabilityScanner,
+				input:   "testdata/fixtures/repo/trivy-ci-test",
+			},
+			golden: "testdata/test-repo.json.golden",
+		},
+		{
+			name: "installed.json",
+			args: args{
+				command:     "rootfs",
+				scanner:     types.VulnerabilityScanner,
+				listAllPkgs: true,
+				input:       "testdata/fixtures/repo/composer-vendor",
+			},
+			golden: "testdata/composer.vendor.json.golden",
 		},
 		{
 			name: "dockerfile",
@@ -379,7 +426,7 @@ func TestRepository(t *testing.T) {
 			},
 			golden: "testdata/gomod-skip.json.golden",
 			override: func(_ *testing.T, want, _ *types.Report) {
-				want.ArtifactType = ftypes.ArtifactFilesystem
+				want.ArtifactType = artifact.TypeFilesystem
 			},
 		},
 		{
@@ -393,16 +440,31 @@ func TestRepository(t *testing.T) {
 			},
 			golden: "testdata/dockerfile-custom-policies.json.golden",
 			override: func(_ *testing.T, want, got *types.Report) {
-				want.ArtifactType = ftypes.ArtifactFilesystem
+				want.ArtifactType = artifact.TypeFilesystem
 			},
+		},
+		{
+			name: "julia generating SPDX SBOM",
+			args: args{
+				command: "rootfs",
+				format:  "spdx-json",
+				input:   "testdata/fixtures/repo/julia",
+			},
+			golden: "testdata/julia-spdx.json.golden",
 		},
 	}
 
 	// Set up testing DB
 	cacheDir := initDB(t)
 
-	// Set a temp dir so that modules will not be loaded
+	// Set up VEX
+	initVEXRepository(t, cacheDir, cacheDir)
+
+	// Set a temp dir so that the VEX config will be loaded and modules will not be loaded
 	t.Setenv("XDG_DATA_HOME", cacheDir)
+
+	// Disable Go license detection
+	t.Setenv("GOPATH", cacheDir)
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -450,7 +512,7 @@ func TestRepository(t *testing.T) {
 			if len(tt.args.ignoreIDs) != 0 {
 				trivyIgnore := ".trivyignore"
 				err := os.WriteFile(trivyIgnore, []byte(strings.Join(tt.args.ignoreIDs, "\n")), 0444)
-				assert.NoError(t, err, "failed to write .trivyignore")
+				require.NoError(t, err, "failed to write .trivyignore")
 				defer os.Remove(trivyIgnore)
 			}
 
@@ -494,6 +556,10 @@ func TestRepository(t *testing.T) {
 
 			if tt.args.secretConfig != "" {
 				osArgs = append(osArgs, "--secret-config", tt.args.secretConfig)
+			}
+
+			if tt.args.vex != "" {
+				osArgs = append(osArgs, "--vex", tt.args.vex)
 			}
 
 			runTest(t, osArgs, tt.golden, "", format, runOptions{

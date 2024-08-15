@@ -1,13 +1,12 @@
 Author: Kevin Chevreuil - Kaisen <kaisen@kaisenlinux.org>
 
---- trivy-0.51.1.orig/pkg/version/version.go
-+++ trivy-0.51.1/pkg/version/version.go
-@@ -11,7 +11,7 @@ import (
- )
+--- trivy-0.54.1.orig/pkg/version/app/version.go
++++ trivy-0.54.1/pkg/version/app/version.go
+@@ -1,6 +1,6 @@
+ package app
  
- var (
--	ver = "dev"
-+	ver = "0.51.1"
- )
+-var ver = "dev"
++var ver = "0.54.1"
  
- func AppVersion() string {
+ func Version() string {
+ 	return ver

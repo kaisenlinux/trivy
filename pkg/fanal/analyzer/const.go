@@ -13,6 +13,7 @@ const (
 	TypeOSRelease  Type = "os-release"
 	TypeAlpine     Type = "alpine"
 	TypeAmazon     Type = "amazon"
+	TypeAzure      Type = "azurelinux"
 	TypeCBLMariner Type = "cbl-mariner"
 	TypeDebian     Type = "debian"
 	TypePhoton     Type = "photon"
@@ -49,12 +50,14 @@ const (
 	TypeCargo      Type = "cargo"
 
 	// PHP
-	TypeComposer Type = "composer"
+	TypeComposer       Type = "composer"
+	TypeComposerVendor Type = "composer-vendor"
 
 	// Java
 	TypeJar        Type = "jar"
 	TypePom        Type = "pom"
 	TypeGradleLock Type = "gradle-lockfile"
+	TypeSbtLock    Type = "sbt-lockfile"
 
 	// Node.js
 	TypeNpmPkgLock Type = "npm"
@@ -93,6 +96,9 @@ const (
 
 	// Dart
 	TypePubSpecLock Type = "pubspec-lock"
+
+	// Julia
+	TypeJulia Type = "julia"
 
 	// ============
 	// Non-packaged
@@ -170,6 +176,7 @@ var (
 		TypeJar,
 		TypePom,
 		TypeGradleLock,
+		TypeSbtLock,
 		TypeNpmPkgLock,
 		TypeNodePkg,
 		TypeYarn,
@@ -191,6 +198,7 @@ var (
 		TypeSwift,
 		TypePubSpecLock,
 		TypeMixLock,
+		TypeJulia,
 	}
 
 	// TypeLockfiles has all lock file analyzers
@@ -206,11 +214,13 @@ var (
 		TypePom,
 		TypeConanLock,
 		TypeGradleLock,
+		TypeSbtLock,
 		TypeCocoaPods,
 		TypeSwift,
 		TypePubSpecLock,
 		TypeMixLock,
 		TypeCondaEnv,
+		TypeComposer,
 	}
 
 	// TypeIndividualPkgs has all analyzers for individual packages
@@ -222,6 +232,7 @@ var (
 		TypeGoBinary,
 		TypeJar,
 		TypeRustBinary,
+		TypeComposerVendor,
 	}
 
 	// TypeConfigFiles has all config file analyzers

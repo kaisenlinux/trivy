@@ -10,6 +10,7 @@ import (
 	"golang.org/x/xerrors"
 
 	"github.com/aquasecurity/trivy/pkg/digest"
+	"github.com/aquasecurity/trivy/pkg/fanal/artifact"
 	ftypes "github.com/aquasecurity/trivy/pkg/fanal/types"
 	"github.com/aquasecurity/trivy/pkg/purl"
 	"github.com/aquasecurity/trivy/pkg/sbom/core"
@@ -34,6 +35,10 @@ func (e *Encoder) Encode(report types.Report) (*core.BOM, error) {
 	}
 
 	e.bom = core.NewBOM(e.opts)
+	if report.BOM != nil {
+		e.bom.SerialNumber = report.BOM.SerialNumber
+		e.bom.Version = report.BOM.Version
+	}
 	e.bom.AddComponent(root)
 
 	for _, result := range report.Results {
@@ -61,29 +66,46 @@ func (e *Encoder) rootComponent(r types.Report) (*core.Component, error) {
 	}
 
 	switch r.ArtifactType {
-	case ftypes.ArtifactContainerImage:
+	case artifact.TypeContainerImage:
 		root.Type = core.TypeContainerImage
 		props = append(props, core.Property{
 			Name:  core.PropertyImageID,
 			Value: r.Metadata.ImageID,
 		})
 
+		// Save image labels as properties with `Labels:` prefix.
+		// e.g. `LABEL vendor="aquasecurity"` => `Labels:vendor` -> `aquasecurity`
+		for label, value := range r.Metadata.ImageConfig.Config.Labels {
+			props = append(props, core.Property{
+				Name:  core.PropertyLabelsPrefix + ":" + label,
+				Value: value,
+			})
+		}
+
 		p, err := purl.New(purl.TypeOCI, r.Metadata, ftypes.Package{})
 		if err != nil {
 			return nil, xerrors.Errorf("failed to new package url for oci: %w", err)
 		}
 		if p != nil {
-			root.PkgID.PURL = p.Unwrap()
+			root.PkgIdentifier.PURL = p.Unwrap()
 		}
 
-	case ftypes.ArtifactVM:
+	case artifact.TypeVM:
 		root.Type = core.TypeVM
-	case ftypes.ArtifactFilesystem:
+	case artifact.TypeFilesystem:
 		root.Type = core.TypeFilesystem
-	case ftypes.ArtifactRepository:
+	case artifact.TypeRepository:
 		root.Type = core.TypeRepository
-	case ftypes.ArtifactCycloneDX:
-		return r.BOM.Root(), nil
+	case artifact.TypeCycloneDX, artifact.TypeSPDX:
+		// When we scan SBOM file
+		// If SBOM file doesn't contain root component - use filesystem
+		if r.BOM != nil && r.BOM.Root() != nil {
+			return r.BOM.Root(), nil
+		}
+		// When we scan a `json` file (meaning a file in `json` format) which was created from the SBOM file.
+		// e.g. for use in `convert` mode.
+		// See https://github.com/aquasecurity/trivy/issues/6780
+		root.Type = core.TypeFilesystem
 	}
 
 	if r.Metadata.Size != 0 {
@@ -166,25 +188,33 @@ func (e *Encoder) encodePackages(parent *core.Component, result types.Result) {
 	vulns := make(map[string][]core.Vulnerability)
 	for _, vuln := range result.Vulnerabilities {
 		v := e.vulnerability(vuln)
-		vulns[v.PkgID] = append(vulns[v.PkgID], v)
+		vulns[vuln.PkgIdentifier.UID] = append(vulns[vuln.PkgIdentifier.UID], v)
 	}
 
 	// Convert packages into components and add them to the BOM
 	parentRelationship := core.RelationshipContains
+
+	// UID => Package Component
 	components := make(map[string]*core.Component, len(result.Packages))
+	// PkgID => Package Component
+	dependencies := make(map[string]*core.Component, len(result.Packages))
 	for i, pkg := range result.Packages {
 		pkgID := lo.Ternary(pkg.ID == "", fmt.Sprintf("%s@%s", pkg.Name, pkg.Version), pkg.ID)
 		result.Packages[i].ID = pkgID
 
 		// Convert packages to components
 		c := e.component(result, pkg)
-		components[pkgID+pkg.FilePath] = c
+		components[pkg.Identifier.UID] = c
+
+		// For dependencies: the key "pkgID" might be duplicated in aggregated packages,
+		// but it doesn't matter as they don't have "DependsOn".
+		dependencies[pkgID] = c
 
 		// Add a component
 		e.bom.AddComponent(c)
 
 		// Add vulnerabilities
-		if vv := vulns[pkgID]; vv != nil {
+		if vv := vulns[pkg.Identifier.UID]; vv != nil {
 			e.bom.AddVulnerabilities(c, vv)
 		}
 
@@ -203,7 +233,7 @@ func (e *Encoder) encodePackages(parent *core.Component, result types.Result) {
 		if pkg.Relationship == ftypes.RelationshipRoot {
 			continue
 		}
-		c := components[pkg.ID+pkg.FilePath]
+		c := components[pkg.Identifier.UID]
 
 		// Add a relationship between the parent and the package if needed
 		if e.belongToParent(pkg, parents) {
@@ -212,7 +242,7 @@ func (e *Encoder) encodePackages(parent *core.Component, result types.Result) {
 
 		// Add relationships between the package and its dependencies
 		for _, dep := range pkg.DependsOn {
-			dependsOn, ok := components[dep]
+			dependsOn, ok := dependencies[dep]
 			if !ok {
 				continue
 			}
@@ -346,7 +376,8 @@ func (*Encoder) component(result types.Result, pkg ftypes.Package) *core.Compone
 		SrcName:    pkg.SrcName,
 		SrcVersion: utils.FormatSrcVersion(pkg),
 		SrcFile:    srcFile,
-		PkgID: core.PkgID{
+		PkgIdentifier: ftypes.PkgIdentifier{
+			UID:  pkg.Identifier.UID,
 			PURL: pkg.Identifier.PURL,
 		},
 		Supplier:   pkg.Maintainer,
@@ -360,7 +391,6 @@ func (*Encoder) vulnerability(vuln types.DetectedVulnerability) core.Vulnerabili
 	return core.Vulnerability{
 		Vulnerability:    vuln.Vulnerability,
 		ID:               vuln.VulnerabilityID,
-		PkgID:            lo.Ternary(vuln.PkgID == "", fmt.Sprintf("%s@%s", vuln.PkgName, vuln.InstalledVersion), vuln.PkgID),
 		PkgName:          vuln.PkgName,
 		InstalledVersion: vuln.InstalledVersion,
 		FixedVersion:     vuln.FixedVersion,

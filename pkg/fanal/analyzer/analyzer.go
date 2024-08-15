@@ -6,12 +6,12 @@ import (
 	"io/fs"
 	"os"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
 
 	"github.com/samber/lo"
-	"golang.org/x/exp/slices"
 	"golang.org/x/sync/semaphore"
 	"golang.org/x/xerrors"
 
@@ -202,7 +202,7 @@ func (r *AnalysisResult) Sort() {
 	})
 
 	for _, app := range r.Applications {
-		sort.Sort(app.Libraries)
+		sort.Sort(app.Packages)
 	}
 
 	// Custom resources
@@ -413,7 +413,7 @@ func (ag AnalyzerGroup) AnalyzeFile(ctx context.Context, wg *sync.WaitGroup, lim
 		}
 		rc, err := opener()
 		if errors.Is(err, fs.ErrPermission) {
-			ag.logger.Debug("Permission error", log.String("file_path", filePath))
+			ag.logger.Debug("Permission error", log.FilePath(filePath))
 			break
 		} else if err != nil {
 			return xerrors.Errorf("unable to open %s: %w", filePath, err)
@@ -475,12 +475,12 @@ func (ag AnalyzerGroup) PostAnalyze(ctx context.Context, compositeFS *CompositeF
 		skippedFiles := result.SystemInstalledFiles
 		for _, app := range result.Applications {
 			skippedFiles = append(skippedFiles, app.FilePath)
-			for _, lib := range app.Libraries {
+			for _, pkg := range app.Packages {
 				// The analysis result could contain packages listed in SBOM.
 				// The files of those packages don't have to be analyzed.
 				// This is especially helpful for expensive post-analyzers such as the JAR analyzer.
-				if lib.FilePath != "" {
-					skippedFiles = append(skippedFiles, lib.FilePath)
+				if pkg.FilePath != "" {
+					skippedFiles = append(skippedFiles, pkg.FilePath)
 				}
 			}
 		}
@@ -504,7 +504,7 @@ func (ag AnalyzerGroup) PostAnalyze(ctx context.Context, compositeFS *CompositeF
 
 // PostAnalyzerFS returns a composite filesystem that contains multiple filesystems for each post-analyzer
 func (ag AnalyzerGroup) PostAnalyzerFS() (*CompositeFS, error) {
-	return NewCompositeFS(ag)
+	return NewCompositeFS()
 }
 
 func (ag AnalyzerGroup) filePatternMatch(analyzerType Type, filePath string) bool {

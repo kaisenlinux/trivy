@@ -6,12 +6,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/aquasecurity/trivy/internal/testutil"
 	"github.com/aquasecurity/trivy/pkg/iac/framework"
 	"github.com/aquasecurity/trivy/pkg/iac/scan"
 	"github.com/aquasecurity/trivy/pkg/iac/scanners/options"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func Test_BasicScan_YAML(t *testing.T) {
@@ -118,7 +119,7 @@ deny[res] {
 		CloudFormation: &scan.EngineMetadata{},
 		CustomChecks:   scan.CustomChecks{Terraform: (*scan.TerraformCustomCheck)(nil)},
 		RegoPackage:    "data.builtin.kubernetes.KSV011",
-		Frameworks:     map[framework.Framework][]string{},
+		Frameworks:     make(map[framework.Framework][]string),
 	}, results.GetFailed()[0].Rule())
 
 	failure := results.GetFailed()[0]
@@ -278,7 +279,7 @@ deny[res] {
 		CloudFormation: &scan.EngineMetadata{},
 		CustomChecks:   scan.CustomChecks{Terraform: (*scan.TerraformCustomCheck)(nil)},
 		RegoPackage:    "data.builtin.kubernetes.KSV011",
-		Frameworks:     map[framework.Framework][]string{},
+		Frameworks:     make(map[framework.Framework][]string),
 	}, results.GetFailed()[0].Rule())
 
 	failure := results.GetFailed()[0]
@@ -338,7 +339,7 @@ spec:
 `))
 	require.NoError(t, err)
 
-	assert.Greater(t, len(results.GetFailed()), 0)
+	assert.NotEmpty(t, results.GetFailed())
 }
 
 func Test_FileScan_WithSeparator(t *testing.T) {
@@ -358,7 +359,7 @@ spec:
 `))
 	require.NoError(t, err)
 
-	assert.Greater(t, len(results.GetFailed()), 0)
+	assert.NotEmpty(t, results.GetFailed())
 }
 
 func Test_FileScan_MultiManifests(t *testing.T) {
@@ -396,7 +397,7 @@ spec:
 	for _, failure := range results.GetFailed() {
 		actualCode, err := failure.GetCode()
 		require.NoError(t, err)
-		assert.Greater(t, len(actualCode.Lines), 0)
+		assert.NotEmpty(t, actualCode.Lines)
 		for _, line := range actualCode.Lines {
 			assert.Greater(t, len(fileLines), line.Number)
 			assert.Equal(t, line.Content, fileLines[line.Number-1])
@@ -424,7 +425,7 @@ spec:
 `))
 	require.NoError(t, err)
 
-	assert.Equal(t, 1, len(results.GetFailed()))
+	assert.Len(t, results.GetFailed(), 1)
 }
 
 func Test_FileScanJSON(t *testing.T) {
@@ -479,7 +480,7 @@ deny[msg] {
 `))
 	require.NoError(t, err)
 
-	assert.Equal(t, 1, len(results.GetFailed()))
+	assert.Len(t, results.GetFailed(), 1)
 }
 
 func Test_FileScanWithMetadata(t *testing.T) {
@@ -514,7 +515,7 @@ spec:
 `))
 	require.NoError(t, err)
 
-	assert.Greater(t, len(results.GetFailed()), 0)
+	assert.NotEmpty(t, results.GetFailed())
 
 	firstResult := results.GetFailed()[0]
 	assert.Equal(t, 2, firstResult.Metadata().Range().GetStartLine())
@@ -592,7 +593,7 @@ spec:
 `))
 	require.NoError(t, err)
 
-	require.Greater(t, len(results.GetFailed()), 0)
+	require.NotEmpty(t, results.GetFailed())
 
 	firstResult := results.GetFailed()[0]
 	assert.Equal(t, 8, firstResult.Metadata().Range().GetStartLine())

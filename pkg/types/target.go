@@ -1,11 +1,11 @@
 package types
 
 import (
-	"golang.org/x/exp/slices"
+	"slices"
 )
 
-// VulnType represents vulnerability type
-type VulnType = string
+// PkgType represents package type
+type PkgType = string
 
 // Scanner represents the type of security scanning
 type Scanner string
@@ -14,20 +14,23 @@ type Scanner string
 type Scanners []Scanner
 
 const (
-	// VulnTypeUnknown is a vulnerability type of unknown
-	VulnTypeUnknown = VulnType("unknown")
+	// PkgTypeUnknown is a package type of unknown
+	PkgTypeUnknown = PkgType("unknown")
 
-	// VulnTypeOS is a vulnerability type of OS packages
-	VulnTypeOS = VulnType("os")
+	// PkgTypeOS is a package type of OS packages
+	PkgTypeOS = PkgType("os")
 
-	// VulnTypeLibrary is a vulnerability type of programming language dependencies
-	VulnTypeLibrary = VulnType("library")
+	// PkgTypeLibrary is a package type of programming language dependencies
+	PkgTypeLibrary = PkgType("library")
 
 	// UnknownScanner is the scanner of unknown
 	UnknownScanner = Scanner("unknown")
 
 	// NoneScanner is the scanner of none
 	NoneScanner = Scanner("none")
+
+	// SBOMScanner is the virtual scanner of SBOM, which cannot be enabled by the user
+	SBOMScanner = Scanner("sbom")
 
 	// VulnerabilityScanner is the scanner of vulnerabilities
 	VulnerabilityScanner = Scanner("vuln")
@@ -46,9 +49,9 @@ const (
 )
 
 var (
-	VulnTypes = []string{
-		VulnTypeOS,
-		VulnTypeLibrary,
+	PkgTypes = []string{
+		PkgTypeOS,
+		PkgTypeLibrary,
 	}
 
 	AllScanners = Scanners{
@@ -70,12 +73,18 @@ var (
 	}
 )
 
-func (scanners Scanners) Enabled(s Scanner) bool {
-	return slices.Contains(scanners, s)
+func (scanners *Scanners) Enable(s Scanner) {
+	if !scanners.Enabled(s) {
+		*scanners = append(*scanners, s)
+	}
+}
+
+func (scanners *Scanners) Enabled(s Scanner) bool {
+	return slices.Contains(*scanners, s)
 }
 
 // AnyEnabled returns true if any of the passed scanners is included.
-func (scanners Scanners) AnyEnabled(ss ...Scanner) bool {
+func (scanners *Scanners) AnyEnabled(ss ...Scanner) bool {
 	for _, s := range ss {
 		if scanners.Enabled(s) {
 			return true

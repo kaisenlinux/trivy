@@ -28,7 +28,7 @@ func Test_rustBinaryLibraryAnalyzer_Analyze(t *testing.T) {
 					{
 						Type:     types.RustBinary,
 						FilePath: "testdata/executable_rust",
-						Libraries: types.Packages{
+						Packages: types.Packages{
 							{
 								ID:           "crate_with_features@0.1.0",
 								Name:         "crate_with_features",
@@ -69,7 +69,7 @@ func Test_rustBinaryLibraryAnalyzer_Analyze(t *testing.T) {
 				Content:  f,
 			})
 
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, tt.want, got)
 		})
 	}

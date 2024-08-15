@@ -20,13 +20,13 @@ func Test_composerAnalyzer_PostAnalyze(t *testing.T) {
 	}{
 		{
 			name: "happy path",
-			dir:  "testdata/happy",
+			dir:  "testdata/composer/happy",
 			want: &analyzer.AnalysisResult{
 				Applications: []types.Application{
 					{
 						Type:     types.Composer,
 						FilePath: "composer.lock",
-						Libraries: types.Packages{
+						Packages: types.Packages{
 							{
 								ID:           "pear/log@1.13.3",
 								Name:         "pear/log",
@@ -63,13 +63,13 @@ func Test_composerAnalyzer_PostAnalyze(t *testing.T) {
 		},
 		{
 			name: "no composer.json",
-			dir:  "testdata/no-composer-json",
+			dir:  "testdata/composer/no-composer-json",
 			want: &analyzer.AnalysisResult{
 				Applications: []types.Application{
 					{
 						Type:     types.Composer,
 						FilePath: "composer.lock",
-						Libraries: types.Packages{
+						Packages: types.Packages{
 							{
 								ID:           "pear/log@1.13.3",
 								Name:         "pear/log",
@@ -106,13 +106,13 @@ func Test_composerAnalyzer_PostAnalyze(t *testing.T) {
 		},
 		{
 			name: "wrong composer.json",
-			dir:  "testdata/wrong-composer-json",
+			dir:  "testdata/composer/wrong-composer-json",
 			want: &analyzer.AnalysisResult{
 				Applications: []types.Application{
 					{
 						Type:     types.Composer,
 						FilePath: "composer.lock",
-						Libraries: types.Packages{
+						Packages: types.Packages{
 							{
 								ID:           "pear/log@1.13.3",
 								Name:         "pear/log",
@@ -149,7 +149,7 @@ func Test_composerAnalyzer_PostAnalyze(t *testing.T) {
 		},
 		{
 			name: "broken composer.lock",
-			dir:  "testdata/sad",
+			dir:  "testdata/composer/sad",
 			want: &analyzer.AnalysisResult{},
 		},
 	}
@@ -163,7 +163,7 @@ func Test_composerAnalyzer_PostAnalyze(t *testing.T) {
 				FS: os.DirFS(tt.dir),
 			})
 
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, tt.want, got)
 		})
 	}

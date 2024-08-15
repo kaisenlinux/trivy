@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"debug/buildinfo"
 	"runtime/debug"
+	"slices"
 	"sort"
 	"strings"
 
@@ -11,7 +12,7 @@ import (
 	"golang.org/x/mod/semver"
 	"golang.org/x/xerrors"
 
-	"github.com/aquasecurity/trivy/pkg/dependency/types"
+	ftypes "github.com/aquasecurity/trivy/pkg/fanal/types"
 	"github.com/aquasecurity/trivy/pkg/log"
 	xio "github.com/aquasecurity/trivy/pkg/x/io"
 )
@@ -39,23 +40,36 @@ type Parser struct {
 	logger *log.Logger
 }
 
-func NewParser() types.Parser {
+func NewParser() *Parser {
 	return &Parser{
 		logger: log.WithPrefix("gobinary"),
 	}
 }
 
 // Parse scans file to try to report the Go and module versions.
-func (p *Parser) Parse(r xio.ReadSeekerAt) ([]types.Library, []types.Dependency, error) {
+func (p *Parser) Parse(r xio.ReadSeekerAt) ([]ftypes.Package, []ftypes.Dependency, error) {
 	info, err := buildinfo.Read(r)
 	if err != nil {
 		return nil, nil, convertError(err)
 	}
 
+	// Ex: "go1.22.3 X:boringcrypto"
+	stdlibVersion := strings.TrimPrefix(info.GoVersion, "go")
+	stdlibVersion, _, _ = strings.Cut(stdlibVersion, " ")
+
 	ldflags := p.ldFlags(info.Settings)
-	libs := make([]types.Library, 0, len(info.Deps)+2)
-	libs = append(libs, []types.Library{
-		{
+	pkgs := make(ftypes.Packages, 0, len(info.Deps)+2)
+	pkgs = append(pkgs, ftypes.Package{
+		// Add the Go version used to build this binary.
+		Name:         "stdlib",
+		Version:      stdlibVersion,
+		Relationship: ftypes.RelationshipDirect, // Considered a direct dependency as the main module depends on the standard packages.
+	})
+
+	// There are times when gobinaries don't contain Main information.
+	// e.g. `Go` binaries (e.g. `go`, `gofmt`, etc.)
+	if info.Main.Path != "" {
+		pkgs = append(pkgs, ftypes.Package{
 			// Add main module
 			Name: info.Main.Path,
 			// Only binaries installed with `go install` contain semver version of the main module.
@@ -64,15 +78,9 @@ func (p *Parser) Parse(r xio.ReadSeekerAt) ([]types.Library, []types.Dependency,
 			// as a secondary source.
 			// See https://github.com/aquasecurity/trivy/issues/1837#issuecomment-1832523477.
 			Version:      cmp.Or(p.checkVersion(info.Main.Path, info.Main.Version), p.ParseLDFlags(info.Main.Path, ldflags)),
-			Relationship: types.RelationshipRoot,
-		},
-		{
-			// Add the Go version used to build this binary.
-			Name:         "stdlib",
-			Version:      strings.TrimPrefix(info.GoVersion, "go"),
-			Relationship: types.RelationshipDirect, // Considered a direct dependency as the main module depends on the standard packages.
-		},
-	}...)
+			Relationship: ftypes.RelationshipRoot,
+		})
+	}
 
 	for _, dep := range info.Deps {
 		// binaries with old go version may incorrectly add module in Deps
@@ -87,14 +95,14 @@ func (p *Parser) Parse(r xio.ReadSeekerAt) ([]types.Library, []types.Dependency,
 			mod = dep.Replace
 		}
 
-		libs = append(libs, types.Library{
+		pkgs = append(pkgs, ftypes.Package{
 			Name:    mod.Path,
 			Version: p.checkVersion(mod.Path, mod.Version),
 		})
 	}
 
-	sort.Sort(types.Libraries(libs))
-	return libs, nil, nil
+	sort.Sort(pkgs)
+	return pkgs, nil, nil
 }
 
 // checkVersion detects `(devel)` versions, removes them and adds a debug message about it.
@@ -135,6 +143,14 @@ func (p *Parser) ParseLDFlags(name string, flags []string) string {
 		return ""
 	}
 
+	// foundVersions contains discovered versions by type.
+	// foundVersions doesn't contain duplicates. Versions are filled into first corresponding category.
+	// Possible elements(categories):
+	//   [0]: Versions using format `github.com/<module_owner>/<module_name>/cmd/**/*.<version>=x.x.x`
+	//   [1]: Versions that use prefixes from `defaultPrefixes`
+	//   [2]: Other versions
+	var foundVersions = make([][]string, 3)
+	defaultPrefixes := []string{"main", "common", "version", "cmd"}
 	for key, val := range x {
 		// It's valid to set the -X flags with quotes so we trim any that might
 		// have been provided: Ex:
@@ -147,19 +163,49 @@ func (p *Parser) ParseLDFlags(name string, flags []string) string {
 		// -X "main.version=1.0.0"
 		key = strings.TrimLeft(key, `'`)
 		val = strings.TrimRight(val, `'`)
-		if isValidXKey(key) && isValidSemVer(val) {
-			return val
+		if isVersionXKey(key) && isValidSemVer(val) {
+			switch {
+			case strings.HasPrefix(key, name+"/cmd/"):
+				foundVersions[0] = append(foundVersions[0], val)
+			case slices.Contains(defaultPrefixes, strings.ToLower(versionPrefix(key))):
+				foundVersions[1] = append(foundVersions[1], val)
+			default:
+				foundVersions[2] = append(foundVersions[2], val)
+			}
 		}
 	}
 
-	p.logger.Debug("Unable to detect dependency version used in `-ldflags` build info settings. Empty version used.", log.String("dependency", name))
+	return p.chooseVersion(name, foundVersions)
+}
+
+// chooseVersion chooses version from found versions
+// Categories order:
+// module name with `cmd` => versions with default prefixes => other versions
+// See more in https://github.com/aquasecurity/trivy/issues/6702#issuecomment-2122271427
+func (p *Parser) chooseVersion(moduleName string, vers [][]string) string {
+	for _, versions := range vers {
+		// Versions for this category was not found
+		if len(versions) == 0 {
+			continue
+		}
+
+		// More than 1 version for one category.
+		// Use empty version.
+		if len(versions) > 1 {
+			p.logger.Debug("Unable to detect dependency version. `-ldflags` build info settings contain more than one version. Empty version used.", log.String("dependency", moduleName))
+			return ""
+		}
+		return versions[0]
+	}
+
+	p.logger.Debug("Unable to detect dependency version. `-ldflags` build info settings don't contain version flag. Empty version used.", log.String("dependency", moduleName))
 	return ""
 }
 
-func isValidXKey(key string) bool {
+func isVersionXKey(key string) bool {
 	key = strings.ToLower(key)
 	// The check for a 'ver' prefix enables the parser to pick up Trivy's own version value that's set.
-	return strings.HasSuffix(key, "version") || strings.HasSuffix(key, "ver")
+	return strings.HasSuffix(key, ".version") || strings.HasSuffix(key, ".ver")
 }
 
 func isValidSemVer(ver string) bool {
@@ -167,4 +213,19 @@ func isValidSemVer(ver string) bool {
 	// here and checking validity again increases the chances that we
 	// parse a valid semver version.
 	return semver.IsValid(ver) || semver.IsValid("v"+ver)
+}
+
+// versionPrefix returns version prefix from `-ldflags` flag key
+// e.g.
+//   - `github.com/aquasecurity/trivy/pkg/version/app.ver` => `version`
+//   - `github.com/google/go-containerregistry/cmd/crane/common.ver` => `common`
+func versionPrefix(s string) string {
+	// Trim module part.
+	// e.g. `github.com/aquasecurity/trivy/pkg/Version.version` => `Version.version`
+	if lastIndex := strings.LastIndex(s, "/"); lastIndex > 0 {
+		s = s[lastIndex+1:]
+	}
+
+	s, _, _ = strings.Cut(s, ".")
+	return strings.ToLower(s)
 }

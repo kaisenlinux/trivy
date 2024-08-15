@@ -1,15 +1,15 @@
 package applier_test
 
 import (
-	"github.com/package-url/packageurl-go"
 	"sort"
 	"testing"
 
+	"github.com/package-url/packageurl-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/aquasecurity/trivy/pkg/cache"
 	"github.com/aquasecurity/trivy/pkg/fanal/applier"
-	"github.com/aquasecurity/trivy/pkg/fanal/cache"
 	"github.com/aquasecurity/trivy/pkg/fanal/types"
 )
 
@@ -111,7 +111,7 @@ func TestApplier_ApplyLayers(t *testing.T) {
 								{
 									Type:     "composer",
 									FilePath: "php-app/composer.lock",
-									Libraries: types.Packages{
+									Packages: types.Packages{
 										{
 											Name:    "guzzlehttp/guzzle",
 											Version: "6.2.0",
@@ -200,7 +200,7 @@ func TestApplier_ApplyLayers(t *testing.T) {
 					{
 						Type:     "composer",
 						FilePath: "php-app/composer.lock",
-						Libraries: types.Packages{
+						Packages: types.Packages{
 							{
 								Name:    "guzzlehttp/guzzle",
 								Version: "6.2.0",
@@ -623,7 +623,7 @@ func TestApplier_ApplyLayers(t *testing.T) {
 								{
 									Type:     "composer",
 									FilePath: "php-app/composer.lock",
-									Libraries: types.Packages{
+									Packages: types.Packages{
 										{
 											Name:    "guzzlehttp/guzzle",
 											Version: "6.2.0",
@@ -672,7 +672,7 @@ func TestApplier_ApplyLayers(t *testing.T) {
 					{
 						Type:     "composer",
 						FilePath: "php-app/composer.lock",
-						Libraries: types.Packages{
+						Packages: types.Packages{
 							{
 								Name:    "guzzlehttp/guzzle",
 								Version: "6.2.0",
@@ -833,7 +833,7 @@ func TestApplier_ApplyLayers(t *testing.T) {
 								{
 									Type:     "composer",
 									FilePath: "php-app/composer.lock",
-									Libraries: types.Packages{
+									Packages: types.Packages{
 										{
 											Name:    "guzzlehttp/guzzle",
 											Version: "6.2.0",
@@ -885,7 +885,7 @@ func TestApplier_ApplyLayers(t *testing.T) {
 					{
 						Type:     "composer",
 						FilePath: "php-app/composer.lock",
-						Libraries: types.Packages{
+						Packages: types.Packages{
 							{
 								Name:    "guzzlehttp/guzzle",
 								Version: "6.2.0",
@@ -972,7 +972,7 @@ func TestApplier_ApplyLayers(t *testing.T) {
 
 			got, err := a.ApplyLayers(tt.args.imageID, tt.args.layerIDs)
 			if tt.wantErr != "" {
-				require.NotNil(t, err)
+				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.wantErr, tt.name)
 			} else {
 				require.NoError(t, err, tt.name)
@@ -980,7 +980,7 @@ func TestApplier_ApplyLayers(t *testing.T) {
 
 			sort.Sort(got.Packages)
 			for _, app := range got.Applications {
-				sort.Sort(app.Libraries)
+				sort.Sort(app.Packages)
 			}
 
 			sort.Slice(got.CustomResources, func(i, j int) bool {
