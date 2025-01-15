@@ -37,7 +37,7 @@ trivy image [flags] IMAGE_NAME
       --cache-backend string              [EXPERIMENTAL] cache backend (e.g. redis://localhost:6379) (default "fs")
       --cache-ttl duration                cache TTL when using redis as cache backend
       --check-namespaces strings          Rego namespaces
-      --checks-bundle-repository string   OCI registry URL to retrieve checks bundle from (default "ghcr.io/aquasecurity/trivy-checks:1")
+      --checks-bundle-repository string   OCI registry URL to retrieve checks bundle from (default "mirror.gcr.io/aquasec/trivy-checks:1")
       --compliance string                 compliance report to generate (docker-cis-1.6.0)
       --config-check strings              specify the paths to the Rego check files or to the directories containing them, applying config files
       --config-data strings               specify paths from which data for the Rego checks will be recursively loaded
@@ -87,7 +87,7 @@ trivy image [flags] IMAGE_NAME
       --parallel int                      number of goroutines enabled for parallel scanning, set 0 to auto-detect parallelism (default 5)
       --password strings                  password. Comma-separated passwords allowed. TRIVY_PASSWORD should be used for security reasons.
       --password-stdin                    password from stdin. Comma-separated passwords are not supported.
-      --pkg-relationships strings         list of package relationships (unknown,root,direct,indirect) (default [unknown,root,direct,indirect])
+      --pkg-relationships strings         list of package relationships (unknown,root,workspace,direct,indirect) (default [unknown,root,workspace,direct,indirect])
       --pkg-types strings                 list of package types (os,library) (default [os,library])
       --platform string                   set platform in the form os/arch if image is multi-platform capable
       --podman-host string                unix podman socket path to use for podman scanning

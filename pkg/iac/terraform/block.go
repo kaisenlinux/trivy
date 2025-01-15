@@ -480,22 +480,12 @@ func (b *Block) FullName() string {
 	return b.LocalName()
 }
 
-func (b *Block) ModuleName() string {
-	name := strings.TrimPrefix(b.LocalName(), "module.")
-	if b.moduleBlock != nil {
-		module := strings.TrimPrefix(b.moduleBlock.FullName(), "module.")
-		name = fmt.Sprintf(
-			"%s.%s",
-			module,
-			name,
-		)
+func (b *Block) ModuleKey() string {
+	name := b.Reference().NameLabel()
+	if b.moduleBlock == nil {
+		return name
 	}
-	var parts []string
-	for _, part := range strings.Split(name, ".") {
-		part = strings.Split(part, "[")[0]
-		parts = append(parts, part)
-	}
-	return strings.Join(parts, ".")
+	return fmt.Sprintf("%s.%s", b.moduleBlock.ModuleKey(), name)
 }
 
 func (b *Block) UniqueName() string {
@@ -579,13 +569,25 @@ func (b *Block) Attributes() map[string]*Attribute {
 	return attributes
 }
 
+func (b *Block) NullableValues() cty.Value {
+	return b.values(true)
+}
+
 func (b *Block) Values() cty.Value {
+	return b.values(false)
+}
+
+func (b *Block) values(allowNull bool) cty.Value {
 	values := createPresetValues(b)
 	for _, attribute := range b.GetAttributes() {
 		if attribute.Name() == "for_each" {
 			continue
 		}
-		values[attribute.Name()] = attribute.Value()
+		if allowNull {
+			values[attribute.Name()] = attribute.NullableValue()
+		} else {
+			values[attribute.Name()] = attribute.Value()
+		}
 	}
 	return cty.ObjectVal(postProcessValues(b, values))
 }
@@ -643,7 +645,7 @@ func (b *Block) expandDynamic() ([]*Block, error) {
 	)
 
 	forEachVal.ForEachElement(func(key, val cty.Value) (stop bool) {
-		if val.IsNull() {
+		if val.IsNull() || !val.IsKnown() {
 			return
 		}
 

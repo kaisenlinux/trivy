@@ -1,11 +1,64 @@
 # Changelog
 
-## [0.57.1](https://github.com/aquasecurity/trivy/compare/v0.57.0...v0.57.1) (2024-11-18)
+## [0.58.2](https://github.com/aquasecurity/trivy/compare/v0.58.1...v0.58.2) (2025-01-13)
+
 
 ### Bug Fixes
 
-* Update registry fallbacks [backport: release/v0.57] ([#7944](https://github.com/aquasecurity/trivy/issues/7944)) ([cd0d128](https://github.com/aquasecurity/trivy/commit/cd0d1281bfd1e2804c2305fafde7831d3ec571df))
-* **redhat:** don't return error if `root/buildinfo/content_manifests/` contains files that are not `contentSets` files [backport: release/v0.57] ([#7939](https://github.com/aquasecurity/trivy/issues/7939)) ([7dd70dc](https://github.com/aquasecurity/trivy/commit/7dd70dcf3e3b0b49af7f375d1ca20777ef6e28e2))
+* CVE-2025-21613 and CVE-2025-21614 : go-git: argument injection via the URL field [backport: release/v0.58] ([#8215](https://github.com/aquasecurity/trivy/issues/8215)) ([b733ecc](https://github.com/aquasecurity/trivy/commit/b733ecc7bc752d61837d08f2650bd480b645bb1d))
+* **misconf:** allow null values only for tf variables [backport: release/v0.58] ([#8238](https://github.com/aquasecurity/trivy/issues/8238)) ([f72d2bc](https://github.com/aquasecurity/trivy/commit/f72d2bce8d3418dbcb670434bc15bb857b421f98))
+* **suse:** SUSE - update OSType constants and references for compatility [backport: release/v0.58] ([#8237](https://github.com/aquasecurity/trivy/issues/8237)) ([2896367](https://github.com/aquasecurity/trivy/commit/289636758eccf990f36ea2be34f6db2c02cfab6b))
+
+## [0.58.1](https://github.com/aquasecurity/trivy/compare/v0.58.0...v0.58.1) (2024-12-24)
+
+
+### Bug Fixes
+
+* handle `BLOW_UNKNOWN` error to download DBs [backport: release/v0.58] ([#8121](https://github.com/aquasecurity/trivy/issues/8121)) ([9a56e7c](https://github.com/aquasecurity/trivy/commit/9a56e7cd6964ffd4187a8e44a36d49b54587db56))
+* **java:** correctly overwrite version from depManagement if dependency uses `project.*` props [backport: release/v0.58] ([#8119](https://github.com/aquasecurity/trivy/issues/8119)) ([4278a09](https://github.com/aquasecurity/trivy/commit/4278a09f59590ee16494e0a1ad31fb374f2e243f))
+* **oracle:** add architectures support for advisories [backport: release/v0.58] ([#8125](https://github.com/aquasecurity/trivy/issues/8125)) ([89b341f](https://github.com/aquasecurity/trivy/commit/89b341f0c6dc7f24239f9a9e4809524ec289a864))
+* **python:** skip dev group's deps for poetry [backport: release/v0.58] ([#8158](https://github.com/aquasecurity/trivy/issues/8158)) ([8b93081](https://github.com/aquasecurity/trivy/commit/8b930816bc527166ced5d57754ad7fccb1cef832))
+* **redhat:** correct rewriting of recommendations for the same vulnerability [backport: release/v0.58] ([#8135](https://github.com/aquasecurity/trivy/issues/8135)) ([33818e1](https://github.com/aquasecurity/trivy/commit/33818e121f989fd12c15aa65affd2d01b867db61))
+* **sbom:** attach nested packages to Application [backport: release/v0.58] ([#8168](https://github.com/aquasecurity/trivy/issues/8168)) ([03160e4](https://github.com/aquasecurity/trivy/commit/03160e4fd1b0a6aef8c4f3d96529e68fed7e70ee))
+* **sbom:** fix wrong overwriting of applications obtained from different sbom files but having same app type [backport: release/v0.58] ([#8124](https://github.com/aquasecurity/trivy/issues/8124)) ([f842fe1](https://github.com/aquasecurity/trivy/commit/f842fe1675b434e72a8194628525c42fd3e155af))
+* **sbom:** use root package for `unknown` dependencies (if exists) [backport: release/v0.58] ([#8156](https://github.com/aquasecurity/trivy/issues/8156)) ([18cd1a5](https://github.com/aquasecurity/trivy/commit/18cd1a59cbb32d87371fe8ab24497f06855e0c80))
+
+## [0.58.0](https://github.com/aquasecurity/trivy/compare/v0.57.0...v0.58.0) (2024-12-02)
+
+
+### Features
+
+* add `workspaceRelationship` ([#7889](https://github.com/aquasecurity/trivy/issues/7889)) ([d622ca2](https://github.com/aquasecurity/trivy/commit/d622ca2b1fe40a0eb588478ba9e15d3bd8471a78))
+* add cvss v4 score and vector in scan response ([#7968](https://github.com/aquasecurity/trivy/issues/7968)) ([e0f2054](https://github.com/aquasecurity/trivy/commit/e0f2054f9d12dce87e8a0226350f6317f7167195))
+* **go:** construct dependencies in the parser ([#7973](https://github.com/aquasecurity/trivy/issues/7973)) ([bcdc0bb](https://github.com/aquasecurity/trivy/commit/bcdc0bbf1f63777ff79d3ecadb8d4f916f376b7d))
+* **go:** construct dependencies of `go.mod` main module in the parser ([#7977](https://github.com/aquasecurity/trivy/issues/7977)) ([5448ba2](https://github.com/aquasecurity/trivy/commit/5448ba2a5c1ee36cbcf74ee1c2e83409092c5715))
+* **k8s:** add default commands for unknown platform ([#7863](https://github.com/aquasecurity/trivy/issues/7863)) ([b1c7f55](https://github.com/aquasecurity/trivy/commit/b1c7f5516fc39c6cbb76cbeae5c8677ccc9ce5dd))
+* **misconf:** log causes of HCL file parsing errors ([#7634](https://github.com/aquasecurity/trivy/issues/7634)) ([e9a899a](https://github.com/aquasecurity/trivy/commit/e9a899a3cfe41a622202808a0241b7f40b54d338))
+* **oracle:** add `flavors` support ([#7858](https://github.com/aquasecurity/trivy/issues/7858)) ([b9b383e](https://github.com/aquasecurity/trivy/commit/b9b383eb2714e88357af75900c856db2900b83ec))
+* **secret:** Add built-in secrets rules for Private Packagist ([#7826](https://github.com/aquasecurity/trivy/issues/7826)) ([132d9df](https://github.com/aquasecurity/trivy/commit/132d9dfa19a8835c94f332c6939ab7f64641ee5f))
+* **suse:** Align SUSE/OpenSUSE OS Identifiers ([#7965](https://github.com/aquasecurity/trivy/issues/7965)) ([45d3b40](https://github.com/aquasecurity/trivy/commit/45d3b40044202dec91384847ce2b50a7271f5977))
+* Update registry fallbacks ([#7679](https://github.com/aquasecurity/trivy/issues/7679)) ([5ba9a83](https://github.com/aquasecurity/trivy/commit/5ba9a83a447c4f9e577ae6235c315df71f50b452))
+
+
+### Bug Fixes
+
+* **alpine:** add `UID` for removed packages ([#7887](https://github.com/aquasecurity/trivy/issues/7887)) ([07915da](https://github.com/aquasecurity/trivy/commit/07915da4816d4d9ec8a6c5e4cba17be2a0f4ad65))
+* **aws:** change CPU and Memory type of ContainerDefinition to a string ([#7995](https://github.com/aquasecurity/trivy/issues/7995)) ([aeeba70](https://github.com/aquasecurity/trivy/commit/aeeba70d15c11443d9fe7c26f90fc7d9dcc7f92c))
+* **cli:** Handle empty ignore files more gracefully ([#7962](https://github.com/aquasecurity/trivy/issues/7962)) ([4cfb2a9](https://github.com/aquasecurity/trivy/commit/4cfb2a97b27923182ab45c178544542ec65981d4))
+* **debian:** infinite loop ([#7928](https://github.com/aquasecurity/trivy/issues/7928)) ([d982e6a](https://github.com/aquasecurity/trivy/commit/d982e6ab89967629f71ec09100cdc61e30a27c63))
+* **fs:** add missing defered Cleanup() call to post analyzer fs ([#7882](https://github.com/aquasecurity/trivy/issues/7882)) ([ab32297](https://github.com/aquasecurity/trivy/commit/ab32297e0a8220a427fa330025f8625281e02275))
+* Improve version comparisons when build identifiers are present ([#7873](https://github.com/aquasecurity/trivy/issues/7873)) ([eda4d76](https://github.com/aquasecurity/trivy/commit/eda4d7660d8908705bc08a6edc55d8144d02806a))
+* **k8s:** check all results for vulnerabilities ([#7946](https://github.com/aquasecurity/trivy/issues/7946)) ([797b36f](https://github.com/aquasecurity/trivy/commit/797b36fbad90b8e7f04e16e2cf08d6bdc0255ac7))
+* **misconf:** do not erase variable type for child modules ([#7941](https://github.com/aquasecurity/trivy/issues/7941)) ([de3b7ea](https://github.com/aquasecurity/trivy/commit/de3b7ea24c282bce22ce9cacb49a43d8d90e2bde))
+* **misconf:** handle null properties in CloudFormation templates ([#7813](https://github.com/aquasecurity/trivy/issues/7813)) ([99b2db3](https://github.com/aquasecurity/trivy/commit/99b2db3978562689cef956a71281abb84ff0ce47))
+* **misconf:** load full Terraform module ([#7925](https://github.com/aquasecurity/trivy/issues/7925)) ([fbc42a0](https://github.com/aquasecurity/trivy/commit/fbc42a04ea24e2246f81491434a965846d55ed69))
+* **misconf:** properly resolve local Terraform cache ([#7983](https://github.com/aquasecurity/trivy/issues/7983)) ([fe3a897](https://github.com/aquasecurity/trivy/commit/fe3a8971b6697d896c1ec30b5326a10c20349d14))
+* **misconf:** Update trivy-checks default repo to `mirror.gcr.io` ([#7953](https://github.com/aquasecurity/trivy/issues/7953)) ([9988147](https://github.com/aquasecurity/trivy/commit/9988147b8b0e463464fe494122bfcc66ccdf04e0))
+* **misconf:** wrap AWS EnvVar to iac types ([#7407](https://github.com/aquasecurity/trivy/issues/7407)) ([54130dc](https://github.com/aquasecurity/trivy/commit/54130dcc1d775506d34b83a558952176fc549914))
+* **redhat:** don't return error if `root/buildinfo/content_manifests/` contains files that are not `contentSets` files ([#7912](https://github.com/aquasecurity/trivy/issues/7912)) ([38775a5](https://github.com/aquasecurity/trivy/commit/38775a5ed985eefe2b410e72407c454cdad3d075))
+* **report:** handle `git@github.com` schema for misconfigs in `sarif` report ([#7898](https://github.com/aquasecurity/trivy/issues/7898)) ([19aea4b](https://github.com/aquasecurity/trivy/commit/19aea4b01f3ce5a3cd05d5a1091da5b0b3ba4af6))
+* **sbom:** Fixes for Programming Language Vulnerabilities and SBOM Package Maintainer Details ([#7871](https://github.com/aquasecurity/trivy/issues/7871)) ([461a68a](https://github.com/aquasecurity/trivy/commit/461a68afd60b77dd67e91047b3b4d558fa5bd2ec))
+* **terraform:** set null value as fallback for missing variables ([#7669](https://github.com/aquasecurity/trivy/issues/7669)) ([611558e](https://github.com/aquasecurity/trivy/commit/611558e4ce61818330118684274534f26b1fda99))
 
 ## [0.57.0](https://github.com/aquasecurity/trivy/compare/v0.56.0...v0.57.0) (2024-10-31)
 

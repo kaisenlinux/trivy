@@ -1,6 +1,14 @@
+trivy (0.58.2-1kaisen) kaisen-packages; urgency=medium
+
+  * Import the 0.58.2 release
+  * Update the quilt patch
+  * Bump the golang-go version required to build
+
+ -- Kevin Chevreuil - Kaisen <kaisen@kaisenlinux.org>  Wed, 15 Jan 2025 16:34:54 +0200
+
 trivy (0.57.1-1kaisen) kaisen-packages; urgency=medium
 
-  * Import the 0.54.1 release
+  * Import the 0.57.1 release
   * Update the quilt patch
   * Bump the golang-go version required to build
 
