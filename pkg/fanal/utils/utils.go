@@ -20,9 +20,7 @@ import (
 	xio "github.com/aquasecurity/trivy/pkg/x/io"
 )
 
-var (
-	PathSeparator = fmt.Sprintf("%c", os.PathSeparator)
-)
+var PathSeparator = fmt.Sprintf("%c", os.PathSeparator)
 
 func CacheDir() string {
 	cacheDir, err := os.UserCacheDir()
@@ -30,15 +28,6 @@ func CacheDir() string {
 		cacheDir = os.TempDir()
 	}
 	return cacheDir
-}
-
-func StringInSlice(a string, list []string) bool {
-	for _, b := range list {
-		if b == a {
-			return true
-		}
-	}
-	return false
 }
 
 func IsCommandAvailable(name string) bool {
@@ -56,14 +45,6 @@ func IsGzip(f *bufio.Reader) bool {
 	return buf[0] == 0x1F && buf[1] == 0x8B && buf[2] == 0x8
 }
 
-func Keys(m map[string]struct{}) []string {
-	var keys []string
-	for k := range m {
-		keys = append(keys, k)
-	}
-	return keys
-}
-
 func IsExecutable(fileInfo os.FileInfo) bool {
 	// For Windows
 	if filepath.Ext(fileInfo.Name()) == ".exe" {
@@ -76,7 +57,7 @@ func IsExecutable(fileInfo os.FileInfo) bool {
 	}
 
 	// Check unpackaged file
-	if mode.Perm()&0111 != 0 {
+	if mode.Perm()&0o111 != 0 {
 		return true
 	}
 	return false
@@ -103,7 +84,7 @@ func IsBinary(content xio.ReadSeekerAt, fileSize int64) (bool, error) {
 }
 
 func CleanSkipPaths(skipPaths []string) []string {
-	return lo.Map(skipPaths, func(skipPath string, index int) string {
+	return lo.Map(skipPaths, func(skipPath string, _ int) string {
 		skipPath = filepath.ToSlash(filepath.Clean(skipPath))
 		return strings.TrimLeft(skipPath, "/")
 	})

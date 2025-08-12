@@ -21,6 +21,12 @@ func main() {
 		if errors.As(err, &exitError) {
 			os.Exit(exitError.Code)
 		}
+
+		var userErr *types.UserError
+		if errors.As(err, &userErr) {
+			log.Fatal("Error", log.Err(userErr))
+		}
+
 		log.Fatal("Fatal error", log.Err(err))
 	}
 }
@@ -35,9 +41,12 @@ func run() error {
 		return nil
 	}
 
+	// Ensure cleanup on exit
+	defer commands.Cleanup()
+
+	// Set up signal handling for graceful shutdown
+	ctx := commands.NotifyContext(context.Background())
+
 	app := commands.NewApp()
-	if err := app.Execute(); err != nil {
-		return err
-	}
-	return nil
+	return app.ExecuteContext(ctx)
 }

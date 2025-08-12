@@ -6,11 +6,12 @@ import (
 	version "github.com/knqyf263/go-apk-version"
 	"golang.org/x/xerrors"
 
+	"github.com/aquasecurity/trivy-db/pkg/db"
 	dbTypes "github.com/aquasecurity/trivy-db/pkg/types"
 	"github.com/aquasecurity/trivy-db/pkg/vulnsrc/wolfi"
 	ftypes "github.com/aquasecurity/trivy/pkg/fanal/types"
 	"github.com/aquasecurity/trivy/pkg/log"
-	"github.com/aquasecurity/trivy/pkg/scanner/utils"
+	"github.com/aquasecurity/trivy/pkg/scan/utils"
 	"github.com/aquasecurity/trivy/pkg/types"
 )
 
@@ -36,7 +37,9 @@ func (s *Scanner) Detect(ctx context.Context, _ string, _ *ftypes.Repository, pk
 		if srcName == "" {
 			srcName = pkg.Name
 		}
-		advisories, err := s.vs.Get("", srcName)
+		advisories, err := s.vs.Get(db.GetParams{
+			PkgName: srcName,
+		})
 		if err != nil {
 			return nil, xerrors.Errorf("failed to get Wolfi advisories: %w", err)
 		}

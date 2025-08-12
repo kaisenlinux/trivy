@@ -154,9 +154,11 @@ var mapping = map[string]expr.SimpleExpr{
 	"GFDL-1.1":                         licence(expr.GFDL11, false),
 	"GFDL-1.1-INVARIANTS":              licence(expr.GFDL11WithInvariants, false),
 	"GFDL-1.1-NO-INVARIANTS":           licence(expr.GFDL11NoInvariants, false),
+	"GFDL-NIV-1.1":                     licence(expr.GFDL11NoInvariants, false),
 	"GFDL-1.2":                         licence(expr.GFDL12, false),
 	"GFDL-1.2-INVARIANTS":              licence(expr.GFDL12WithInvariants, false),
 	"GFDL-1.2-NO-INVARIANTS":           licence(expr.GFDL12NoInvariants, false),
+	"GFDL-NIV-1.2":                     licence(expr.GFDL12NoInvariants, false),
 	"GFDL-1.3":                         licence(expr.GFDL13, false),
 	"GFDL-1.3-INVARIANTS":              licence(expr.GFDL13WithInvariants, false),
 	"GFDL-1.3-NO-INVARIANTS":           licence(expr.GFDL13NoInvariants, false),
@@ -618,10 +620,7 @@ func isLicenseText(str string) bool {
 
 func TrimLicenseText(text string) string {
 	s := strings.Split(text, " ")
-	n := len(s)
-	if n > 3 {
-		n = 3
-	}
+	n := min(len(s), 3)
 	return strings.Join(s[:n], " ") + "..."
 }
 
@@ -641,7 +640,6 @@ var plusSuffixes = [3]string{"+", "-OR-LATER", " OR LATER"}
 func standardizeKeyAndSuffix(name string) expr.SimpleExpr {
 	// Standardize space, including newline
 	name = strings.Join(strings.Fields(name), " ")
-	name = strings.TrimSpace(name)
 	name = strings.ToUpper(name)
 	// Do not perform any further normalization for URLs
 	if strings.HasPrefix(name, "HTTP") {
@@ -675,15 +673,38 @@ func standardizeKeyAndSuffix(name string) expr.SimpleExpr {
 }
 
 func Normalize(name string) string {
-	return NormalizeLicense(name).String()
+	return NormalizeLicense(expr.SimpleExpr{License: name}).String()
 }
 
-func NormalizeLicense(name string) expr.SimpleExpr {
+func NormalizeLicense(exp expr.Expression) expr.Expression {
+	switch e := exp.(type) {
+	case expr.SimpleExpr:
+		return normalizeSimpleExpr(e)
+	case expr.CompoundExpr:
+		return normalizeCompoundExpr(e)
+	}
+	return exp
+}
+
+func normalizeSimpleExpr(e expr.SimpleExpr) expr.Expression {
+	// Always trim leading and trailing spaces, even if we don't find this license in `mapping`.
+	name := strings.TrimSpace(e.License)
 	normalized := standardizeKeyAndSuffix(name)
+	if found, ok := mapping[normalized.License]; ok {
+		return expr.SimpleExpr{License: found.License, HasPlus: e.HasPlus || found.HasPlus || normalized.HasPlus}
+	}
+	return expr.SimpleExpr{License: name, HasPlus: e.HasPlus}
+}
+
+func normalizeCompoundExpr(e expr.CompoundExpr) expr.Expression {
+	if e.Conjunction() != expr.TokenWith {
+		return e // Do not normalize compound expressions other than "WITH"
+	}
+	normalized := standardizeKeyAndSuffix(e.String())
 	if found, ok := mapping[normalized.License]; ok {
 		return expr.SimpleExpr{License: found.License, HasPlus: found.HasPlus || normalized.HasPlus}
 	}
-	return expr.SimpleExpr{License: name, HasPlus: false}
+	return e // Do not normalize compound expressions that are not found in `mapping`
 }
 
 func SplitLicenses(str string) []string {
@@ -729,16 +750,28 @@ func LaxSplitLicenses(str string) []string {
 		return nil
 	}
 	var licenses []string
+	var afterWith bool
 	str = versionRegexp.ReplaceAllString(str, "$1-$4")
-	for _, s := range strings.Fields(str) {
+	for s := range strings.FieldsSeq(str) {
 		s = strings.Trim(s, "()")
-		switch {
-		case s == "":
+		switch s {
+		case "":
 			continue
-		case s == "AND" || s == "OR":
+		case "AND", "OR":
+			continue
+		case "WITH":
+			afterWith = true
 			continue
 		default:
-			licenses = append(licenses, Normalize(s))
+			normalizedLicense := Normalize(s)
+			if afterWith && len(licenses) > 0 {
+				// If we found "WITH" operator, we should not split the license
+				// e.g. "GPL-2 WITH Autoconf exception" => {"GPL-2 WITH Autoconf exception"}
+				licenses[len(licenses)-1] += " WITH " + normalizedLicense
+				afterWith = false
+			} else {
+				licenses = append(licenses, normalizedLicense)
+			}
 		}
 	}
 	return licenses

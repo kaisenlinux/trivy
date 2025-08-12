@@ -25,11 +25,14 @@ const (
 	Alpine             OSType = "alpine"
 	Amazon             OSType = "amazon"
 	Azure              OSType = "azurelinux"
+	Bottlerocket       OSType = "bottlerocket"
 	CBLMariner         OSType = "cbl-mariner"
 	CentOS             OSType = "centos"
 	Chainguard         OSType = "chainguard"
 	Debian             OSType = "debian"
+	Echo               OSType = "echo"
 	Fedora             OSType = "fedora"
+	MinimOS            OSType = "minimos"
 	OpenSUSE           OSType = "opensuse"
 	OpenSUSELeap       OSType = "opensuse-leap"
 	OpenSUSETumbleweed OSType = "opensuse-tumbleweed"
@@ -44,12 +47,16 @@ const (
 )
 
 // OSTypeAliases is a map of aliases for operating systems.
-// This is used to map the old family names to the new ones for backward compatibility.
 var OSTypeAliases = map[OSType]OSType{
+	// This is used to map the old family names to the new ones for backward compatibility.
 	"opensuse.leap":                OpenSUSELeap,
 	"opensuse.tumbleweed":          OpenSUSETumbleweed,
 	"suse linux enterprise micro":  SLEMicro,
 	"suse linux enterprise server": SLES,
+	// This is used to map OS names in EKS
+	"amazon linux": Amazon,
+	// This is used to map OS names in Kind
+	"debian gnu/linux": Debian,
 }
 
 // Programming language dependencies
@@ -60,12 +67,14 @@ const (
 	Composer       LangType = "composer"
 	ComposerVendor LangType = "composer-vendor"
 	Npm            LangType = "npm"
+	Bun            LangType = "bun"
 	NuGet          LangType = "nuget"
 	DotNetCore     LangType = "dotnet-core"
 	PackagesProps  LangType = "packages-props"
 	Pip            LangType = "pip"
 	Pipenv         LangType = "pipenv"
 	Poetry         LangType = "poetry"
+	Uv             LangType = "uv"
 	CondaPkg       LangType = "conda-pkg"
 	CondaEnv       LangType = "conda-environment"
 	PythonPkg      LangType = "python-pkg"
@@ -96,13 +105,39 @@ const (
 	OCP         LangType = "ocp" // Red Hat OpenShift Container Platform
 )
 
-var AggregatingTypes = []LangType{
-	PythonPkg,
-	CondaPkg,
-	GemSpec,
-	NodePkg,
-	Jar,
-}
+var (
+	OSTypes = []OSType{
+		Alma,
+		Alpine,
+		Amazon,
+		Azure,
+		CBLMariner,
+		CentOS,
+		Chainguard,
+		Debian,
+		Echo,
+		Fedora,
+		MinimOS,
+		OpenSUSE,
+		OpenSUSELeap,
+		OpenSUSETumbleweed,
+		Oracle,
+		Photon,
+		RedHat,
+		Rocky,
+		SLEMicro,
+		SLES,
+		Ubuntu,
+		Wolfi,
+	}
+	AggregatingTypes = []LangType{
+		PythonPkg,
+		CondaPkg,
+		GemSpec,
+		NodePkg,
+		Jar,
+	}
+)
 
 // Config files
 const (
@@ -134,6 +169,7 @@ const (
 	NpmPkgLock = "package-lock.json"
 	YarnLock   = "yarn.lock"
 	PnpmLock   = "pnpm-lock.yaml"
+	BunLock    = "bun.lock"
 
 	ComposerLock          = "composer.lock"
 	ComposerJson          = "composer.json"
@@ -143,6 +179,7 @@ const (
 	PipRequirements = "requirements.txt"
 	PipfileLock     = "Pipfile.lock"
 	PoetryLock      = "poetry.lock"
+	UvLock          = "uv.lock"
 
 	GemfileLock = "Gemfile.lock"
 

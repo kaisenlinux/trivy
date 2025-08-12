@@ -8,6 +8,7 @@ The following scanners are supported for package managers.
 | pip             |  ✓   |       ✓       |    ✓    |
 | Pipenv          |  ✓   |       ✓       |    -    |
 | Poetry          |  ✓   |       ✓       |    -    |
+| uv              |  ✓   |       ✓       |    -    |
 
 In addition, Trivy supports three formats of Python packages: `egg`, `wheel` and `conda`.
 The following scanners are supported for Python packages.
@@ -25,7 +26,8 @@ The following table provides an outline of the features Trivy offers.
 |-----------------|------------------|:-----------------------:|:----------------:|:------------------------------------:|:--------:|:----------------------------------------:|
 | pip             | requirements.txt |            -            |     Include      |                  -                   |    ✓     |                    ✓                     |
 | Pipenv          | Pipfile.lock     |            ✓            |     Include      |                  -                   |    ✓     |                Not needed                |
-| Poetry          | poetry.lock      |            ✓            |     Exclude      |                  ✓                   |    -     |                Not needed                |
+| Poetry          | poetry.lock      |            ✓            |     [Exclude](#poetry)      |                  ✓                   |    -     |                Not needed                |
+| uv              | uv.lock          |            ✓            |     [Exclude](#uv)      |                  ✓                   |    -     |                Not needed                |          |
 
 
 | Packaging | Dependency graph |
@@ -52,7 +54,8 @@ keyring >= 4.1.1            # Minimum version 4.1.1
 Mopidy-Dirble ~= 1.1        # Minimum version 1.1
 python-gitlab==2.0.*        # Minimum version 2.0.0
 ```
-Also, there is a way to convert unsupported version specifiers - use the `pip  freeze` command.
+Also, there is a way to convert unsupported version specifiers - use either the `pip-compile` tool (which doesn't install the packages)
+or call `pip freeze` from the virtual environment where the requirements are already installed.
 
 ```bash
 $ cat requirements.txt 
@@ -79,7 +82,8 @@ wheel==0.42.0
 `requirements.txt` files usually contain only the direct dependencies and not contain the transitive dependencies.
 Therefore, Trivy scans only for the direct dependencies with `requirements.txt`.
 
-To detect transitive dependencies as well, you need to generate `requirements.txt` with `pip freeze`.
+To detect transitive dependencies as well, you need to generate `requirements.txt` that contains them.
+Like described above, tou can do it with `pip freeze` or `pip-compile`.
 
 ```zsh
 $ cat requirements.txt # it will only find `requests@2.28.2`.
@@ -126,15 +130,25 @@ To build the correct dependency graph, `pyproject.toml` also needs to be present
 
 License detection is not supported for `Poetry`.
 
+By default, Trivy doesn't report development dependencies. Use the `--include-dev-deps` flag to include them.
+
+
+### uv
+Trivy uses `uv.lock` to identify dependencies and find vulnerabilities.
+
+License detection is not supported for `uv`.
+
+By default, Trivy doesn't report development dependencies. Use the `--include-dev-deps` flag to include them.
+
 ## Packaging
 Trivy parses the manifest files of installed packages in container image scanning and so on.
 See [here](https://packaging.python.org/en/latest/discussions/package-formats/) for the detail.
 
 ### Egg
-Trivy looks for `*.egg-info`, `*.egg-info/PKG-INFO`, `*.egg` and `EGG-INFO/PKG-INFO` to identify Python packages.
+Trivy looks for `*.egg-info`, `*.egg-info/METADATA`, `*.egg-info/PKG-INFO`, `*.egg` and `EGG-INFO/PKG-INFO` to identify Python packages.
 
 ### Wheel
-Trivy looks for `.dist-info/META-DATA` to identify Python packages.
+Trivy looks for `.dist-info/METADATA` to identify Python packages.
 
 [^1]: Trivy checks `python`, `python3`, `python2` and `python.exe` file names.
 

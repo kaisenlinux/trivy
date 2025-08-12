@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/aquasecurity/trivy/pkg/dependency/parser/python/pyproject"
+	"github.com/aquasecurity/trivy/pkg/set"
 )
 
 func TestParser_Parse(t *testing.T) {
@@ -24,21 +25,44 @@ func TestParser_Parse(t *testing.T) {
 			want: pyproject.PyProject{
 				Tool: pyproject.Tool{
 					Poetry: pyproject.Poetry{
-						Dependencies: map[string]struct{}{
-							"flask":      {},
-							"python":     {},
-							"requests":   {},
-							"virtualenv": {},
+						Dependencies: pyproject.Dependencies{
+							Set: set.New[string]("flask", "python", "requests", "virtualenv"),
 						},
 						Groups: map[string]pyproject.Group{
 							"dev": {
-								Dependencies: map[string]struct{}{
-									"pytest": {},
+								Dependencies: pyproject.Dependencies{
+									Set: set.New[string]("pytest"),
 								},
 							},
 							"lint": {
-								Dependencies: map[string]struct{}{
-									"ruff": {},
+								Dependencies: pyproject.Dependencies{
+									Set: set.New[string]("ruff"),
+								},
+							},
+						},
+					},
+				},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "happy path v2",
+			file: "testdata/happy_v2.toml",
+			want: pyproject.PyProject{
+				Project: pyproject.Project{
+					Dependencies: pyproject.Dependencies{
+						Set: set.New[string]("check-wheel-contents", "flask", "pluggy"),
+					},
+				},
+				Tool: pyproject.Tool{
+					Poetry: pyproject.Poetry{
+						Dependencies: pyproject.Dependencies{
+							Set: set.New[string]("annotated-types", "python"),
+						},
+						Groups: map[string]pyproject.Group{
+							"dev": {
+								Dependencies: pyproject.Dependencies{
+									Set: set.New[string]("pytest"),
 								},
 							},
 						},

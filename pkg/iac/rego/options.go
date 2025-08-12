@@ -69,9 +69,7 @@ func WithDataDirs(paths ...string) options.ScannerOption {
 func WithPolicyNamespaces(namespaces ...string) options.ScannerOption {
 	return func(s options.ConfigurableScanner) {
 		if ss, ok := s.(*Scanner); ok {
-			for _, namespace := range namespaces {
-				ss.ruleNamespaces[namespace] = struct{}{}
-			}
+			ss.ruleNamespaces.Append(namespaces...)
 		}
 	}
 }
@@ -108,21 +106,10 @@ func WithCustomSchemas(schemas map[string][]byte) options.ScannerOption {
 	}
 }
 
-// WithDisabledCheckIDs disables checks by their ID (ID field in metadata)
-func WithDisabledCheckIDs(ids ...string) options.ScannerOption {
+func WithIncludeDeprecatedChecks(include bool) options.ScannerOption {
 	return func(s options.ConfigurableScanner) {
 		if ss, ok := s.(*Scanner); ok {
-			for _, id := range ids {
-				ss.disabledCheckIDs[id] = struct{}{}
-			}
-		}
-	}
-}
-
-func WithIncludeDeprecatedChecks(enabled bool) options.ScannerOption {
-	return func(s options.ConfigurableScanner) {
-		if ss, ok := s.(*Scanner); ok {
-			ss.includeDeprecatedChecks = true
+			ss.includeDeprecatedChecks = include
 		}
 	}
 }
@@ -131,6 +118,14 @@ func WithFrameworks(frameworks ...framework.Framework) options.ScannerOption {
 	return func(s options.ConfigurableScanner) {
 		if ss, ok := s.(*Scanner); ok {
 			ss.frameworks = frameworks
+		}
+	}
+}
+
+func WithTrivyVersion(version string) options.ScannerOption {
+	return func(s options.ConfigurableScanner) {
+		if ss, ok := s.(*Scanner); ok {
+			ss.moduleFilters = append(ss.moduleFilters, TrivyVersionFilter(version))
 		}
 	}
 }

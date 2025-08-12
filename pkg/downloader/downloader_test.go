@@ -1,7 +1,6 @@
 package downloader_test
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -11,11 +10,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/aquasecurity/trivy/pkg/downloader"
+	xhttp "github.com/aquasecurity/trivy/pkg/x/http"
 )
 
 func TestDownload(t *testing.T) {
 	// Set up a test server with a self-signed certificate
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, err := w.Write([]byte("test content"))
 		assert.NoError(t, err)
 	}))
@@ -43,8 +43,13 @@ func TestDownload(t *testing.T) {
 			// Set up the destination path
 			dst := t.TempDir()
 
+			// Configure the HTTP transport with the insecure option
+			ctx := xhttp.WithTransport(t.Context(), xhttp.NewTransport(xhttp.Options{
+				Insecure: tt.insecure,
+			}))
+
 			// Execute the download
-			_, err := downloader.Download(context.Background(), server.URL, dst, "", downloader.Options{
+			_, err := downloader.Download(ctx, server.URL, dst, "", downloader.Options{
 				Insecure: tt.insecure,
 			})
 

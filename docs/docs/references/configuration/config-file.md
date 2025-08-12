@@ -137,6 +137,9 @@ image:
   # Same as '--input'
   input: ""
 
+  # Same as '--max-image-size'
+  max-size: ""
+
   # Same as '--platform'
   platform: ""
 
@@ -406,6 +409,12 @@ misconfiguration:
   # Same as '--include-non-failures'
   include-non-failures: false
 
+  # Same as '--raw-config-scanners'
+  raw-config-scanners: []
+
+  # Same as '--render-cause'
+  render-cause: []
+
   # Same as '--misconfig-scanners'
   scanners:
    - azure-arm
@@ -461,6 +470,8 @@ pkg:
 
 ```yaml
 registry:
+  mirrors:
+
   # Same as '--password'
   password: []
 
@@ -493,7 +504,7 @@ rego:
   # Same as '--skip-check-update'
   skip-check-update: false
 
-  # Same as '--trace'
+  # Same as '--trace-rego'
   trace: false
 
 ```
@@ -545,6 +556,11 @@ severity:
  - HIGH
  - CRITICAL
 
+# Same as '--table-mode'
+table-mode:
+ - summary
+ - detailed
+
 # Same as '--template'
 template: ""
 
@@ -569,6 +585,12 @@ repository:
 scan:
   # Same as '--detection-priority'
   detection-priority: "precise"
+
+  # Same as '--disable-telemetry'
+  disable-telemetry: false
+
+  # Same as '--distro'
+  distro: ""
 
   # Same as '--file-patterns'
   file-patterns: []
@@ -596,6 +618,9 @@ scan:
   # Same as '--skip-files'
   skip-files: []
 
+  # Same as '--skip-version-check'
+  skip-version-check: false
+
 ```
 ## Secret options
 
@@ -614,6 +639,10 @@ vulnerability:
 
   # Same as '--ignore-unfixed'
   ignore-unfixed: false
+
+  # Same as '--vuln-severity-source'
+  severity-source:
+   - auto
 
   # Same as '--skip-vex-repo-update'
   skip-vex-repo-update: false

@@ -3,6 +3,7 @@ package cyclonedx
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 
@@ -87,6 +88,11 @@ func (b *BOM) parseBOM(bom *cdx.BOM) error {
 			b.BOM.AddRelationship(ref, dependency, core.RelationshipDependsOn)
 		}
 	}
+
+	if refs := b.parseExternalReferences(bom); refs != nil {
+		b.BOM.AddExternalReferences(refs)
+	}
+
 	return nil
 }
 
@@ -101,6 +107,39 @@ func (b *BOM) parseMetadataComponent(bom *cdx.BOM) (*core.Component, error) {
 	root.Root = true
 	b.BOM.AddComponent(root)
 	return root, nil
+}
+
+func (b *BOM) parseExternalReferences(bom *cdx.BOM) []core.ExternalReference {
+	if bom.ExternalReferences == nil {
+		return nil
+	}
+	var refs = make([]core.ExternalReference, 0)
+
+	for _, ref := range *bom.ExternalReferences {
+		t, err := b.unmarshalReferenceType(ref.Type)
+		if err != nil {
+			continue
+		}
+
+		externalReference := core.ExternalReference{
+			Type: t,
+			URL:  ref.URL,
+		}
+
+		refs = append(refs, externalReference)
+	}
+	return refs
+}
+
+func (b *BOM) unmarshalReferenceType(t cdx.ExternalReferenceType) (core.ExternalReferenceType, error) {
+	var referenceType core.ExternalReferenceType
+	switch t {
+	case cdx.ERTypeExploitabilityStatement:
+		referenceType = core.ExternalReferenceVEX
+	default:
+		return "", fmt.Errorf("unsupported external reference type: %s", t)
+	}
+	return referenceType, nil
 }
 
 func (b *BOM) parseComponents(cdxComponents *[]cdx.Component) map[string]*core.Component {
@@ -218,6 +257,8 @@ func (b *BOM) unmarshalHashes(hashes *[]cdx.Hash) []digest.Digest {
 			alg = digest.SHA1
 		case cdx.HashAlgoSHA256:
 			alg = digest.SHA256
+		case cdx.HashAlgoSHA512:
+			alg = digest.SHA512
 		case cdx.HashAlgoMD5:
 			alg = digest.MD5
 		default:

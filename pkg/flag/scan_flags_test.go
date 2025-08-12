@@ -7,16 +7,19 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	ftypes "github.com/aquasecurity/trivy/pkg/fanal/types"
 	"github.com/aquasecurity/trivy/pkg/flag"
 	"github.com/aquasecurity/trivy/pkg/types"
 )
 
 func TestScanFlagGroup_ToOptions(t *testing.T) {
 	type fields struct {
-		skipDirs    []string
-		skipFiles   []string
-		offlineScan bool
-		scanners    string
+		skipDirs         []string
+		skipFiles        []string
+		offlineScan      bool
+		scanners         string
+		distro           string
+		skipVersionCheck bool
 	}
 	tests := []struct {
 		name      string
@@ -105,6 +108,36 @@ func TestScanFlagGroup_ToOptions(t *testing.T) {
 			},
 			assertion: require.NoError,
 		},
+		{
+			name: "happy path `distro` flag",
+			fields: fields{
+				distro: "alpine/3.20",
+			},
+			want: flag.ScanOptions{
+				Distro: ftypes.OS{
+					Family: "alpine",
+					Name:   "3.20",
+				},
+			},
+			assertion: require.NoError,
+		},
+		{
+			name: "sad distro flag",
+			fields: fields{
+				distro: "sad",
+			},
+			assertion: require.Error,
+		},
+		{
+			name: "skip version check flag",
+			fields: fields{
+				skipVersionCheck: true,
+			},
+			want: flag.ScanOptions{
+				SkipVersionCheck: true,
+			},
+			assertion: require.NoError,
+		},
 	}
 
 	for _, tt := range tests {
@@ -114,18 +147,23 @@ func TestScanFlagGroup_ToOptions(t *testing.T) {
 			setSliceValue(flag.SkipFilesFlag.ConfigName, tt.fields.skipFiles)
 			setValue(flag.OfflineScanFlag.ConfigName, tt.fields.offlineScan)
 			setValue(flag.ScannersFlag.ConfigName, tt.fields.scanners)
+			setValue(flag.DistroFlag.ConfigName, tt.fields.distro)
+			setValue(flag.SkipVersionCheckFlag.ConfigName, tt.fields.skipVersionCheck)
 
 			// Assert options
 			f := &flag.ScanFlagGroup{
-				SkipDirs:    flag.SkipDirsFlag.Clone(),
-				SkipFiles:   flag.SkipFilesFlag.Clone(),
-				OfflineScan: flag.OfflineScanFlag.Clone(),
-				Scanners:    flag.ScannersFlag.Clone(),
+				SkipDirs:         flag.SkipDirsFlag.Clone(),
+				SkipFiles:        flag.SkipFilesFlag.Clone(),
+				OfflineScan:      flag.OfflineScanFlag.Clone(),
+				Scanners:         flag.ScannersFlag.Clone(),
+				DistroFlag:       flag.DistroFlag.Clone(),
+				SkipVersionCheck: flag.SkipVersionCheckFlag.Clone(),
 			}
 
-			got, err := f.ToOptions(tt.args)
+			flags := flag.Flags{f}
+			got, err := flags.ToOptions(tt.args)
 			tt.assertion(t, err)
-			assert.Equalf(t, tt.want, got, "ToOptions()")
+			assert.Equal(t, tt.want, got.ScanOptions)
 		})
 	}
 }

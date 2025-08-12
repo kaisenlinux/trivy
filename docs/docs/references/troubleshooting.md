@@ -79,20 +79,24 @@ $ TRIVY_INSECURE=true trivy image [YOUR_IMAGE]
 ```
 
 ### GitHub Rate limiting
+Trivy uses GitHub API for [VEX repositories](../supply-chain/vex/repo.md).
 
 !!! error
     ``` bash
-    $ trivy image ...
+    $ trivy image --vex repo ...
     ...
     API rate limit exceeded for xxx.xxx.xxx.xxx.
     ```
 
-Specify GITHUB_TOKEN for authentication
-https://developer.github.com/v3/#rate-limiting
+Specify GITHUB_TOKEN for [authentication](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api?apiVersion=2022-11-28)
 
 ```
-$ GITHUB_TOKEN=XXXXXXXXXX trivy alpine:3.10
+$ GITHUB_TOKEN=XXXXXXXXXX trivy image --vex repo [YOUR_IMAGE]
 ```
+
+!!! note
+    `GITHUB_TOKEN` doesn't help with the rate limit for the vulnerability database and other assets.
+    See https://github.com/aquasecurity/trivy/discussions/8009
 
 ### Unable to open JAR files
 
@@ -217,6 +221,11 @@ Please remove the token and try downloading the DB again.
 docker logout ghcr.io
 ```
 
+or
+
+```shell
+unset GITHUB_TOKEN
+```
 
 ## Homebrew
 ### Scope error
@@ -258,6 +267,25 @@ $ brew install aquasecurity/trivy/trivy
 ```
 
 
+## Debugging
+### HTTP Request/Response Tracing
+
+For debugging network issues, connection problems, or authentication failures, you can enable HTTP request/response tracing using the `--trace-http` flag.
+
+!!! danger "Security Warning"
+    While Trivy attempts to redact known sensitive information such as authentication headers and common secrets, the `--trace-http` flag may still expose sensitive data in HTTP requests and responses.
+    
+    **Never use this flag in production environments or CI/CD pipelines.**
+    This flag is automatically disabled in CI environments for security.
+
+```bash
+# Enable HTTP tracing for debugging registry issues
+$ trivy image --trace-http registry.example.com/my-image:latest
+
+# HTTP tracing with other debugging options
+$ trivy image --trace-http --debug --insecure my-image:tag
+```
+
 ## Others
 ### Unknown error
 
@@ -268,5 +296,5 @@ $ trivy clean --all
 ```
 
 [air-gapped]: ../advanced/air-gap.md
-[network]: ../advanced/air-gap.md#network-requirements
+[network]: ../advanced/air-gap.md#connectivity-requirements
 [redis-cache]: ../configuration/cache.md#redis

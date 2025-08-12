@@ -136,7 +136,7 @@ func MakeTemplateFileFunc(target fs.FS, baseDir string, funcsCb func() map[strin
 				funcs[name] = function.New(&function.Spec{
 					Params: params,
 					Type: func(args []cty.Value) (cty.Type, error) {
-						return cty.NilType, fmt.Errorf("cannot recursively call templatefile from inside templatefile call")
+						return cty.NilType, errors.New("cannot recursively call templatefile from inside templatefile call")
 					},
 				})
 				continue
@@ -368,10 +368,11 @@ func openFile(target fs.FS, baseDir, path string) (fs.File, error) {
 	// Trivy uses a virtual file system
 	path = filepath.ToSlash(path)
 
-	if target != nil {
-		return target.Open(path)
+	if target == nil {
+		return nil, fmt.Errorf("open file %q, filesystem is nil", path)
 	}
-	return os.Open(path)
+
+	return target.Open(path)
 }
 
 func readFileBytes(target fs.FS, baseDir, path string) ([]byte, error) {

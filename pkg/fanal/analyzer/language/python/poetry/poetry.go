@@ -17,6 +17,7 @@ import (
 	"github.com/aquasecurity/trivy/pkg/fanal/analyzer/language"
 	"github.com/aquasecurity/trivy/pkg/fanal/types"
 	"github.com/aquasecurity/trivy/pkg/log"
+	"github.com/aquasecurity/trivy/pkg/set"
 	"github.com/aquasecurity/trivy/pkg/utils/fsutils"
 )
 
@@ -43,11 +44,11 @@ func newPoetryAnalyzer(_ analyzer.AnalyzerOptions) (analyzer.PostAnalyzer, error
 func (a poetryAnalyzer) PostAnalyze(_ context.Context, input analyzer.PostAnalysisInput) (*analyzer.AnalysisResult, error) {
 	var apps []types.Application
 
-	required := func(path string, d fs.DirEntry) bool {
-		return filepath.Base(path) == types.PoetryLock
+	required := func(path string, _ fs.DirEntry) bool {
+		return filepath.Base(path) == types.PoetryLock || input.FilePatterns.Match(path)
 	}
 
-	err := fsutils.WalkDir(input.FS, ".", required, func(path string, d fs.DirEntry, r io.Reader) error {
+	err := fsutils.WalkDir(input.FS, ".", required, func(path string, _ fs.DirEntry, r io.Reader) error {
 		// Parse poetry.lock
 		app, err := a.parsePoetryLock(path, r)
 		if err != nil {
@@ -103,53 +104,52 @@ func (a poetryAnalyzer) mergePyProject(fsys fs.FS, dir string, app *types.Applic
 		return xerrors.Errorf("unable to parse %s: %w", path, err)
 	}
 
-	// Identify the direct/transitive dependencies
+	dirDeps := directDeps(project)
+	prodDeps := prodPackages(app, project.MainDeps())
+
+	// Identify the direct/transitive/dev dependencies
 	for i, pkg := range app.Packages {
-		if _, ok := project.Tool.Poetry.Dependencies[pkg.Name]; ok {
+		app.Packages[i].Dev = !prodDeps.Contains(pkg.ID) || app.Packages[i].Dev
+		if dirDeps.Contains(pkg.Name) {
 			app.Packages[i].Relationship = types.RelationshipDirect
 		} else {
 			app.Packages[i].Indirect = true
 			app.Packages[i].Relationship = types.RelationshipIndirect
 		}
 	}
-
-	filterProdPackages(project, app)
 	return nil
 }
 
-func filterProdPackages(project pyproject.PyProject, app *types.Application) {
+func directDeps(project pyproject.PyProject) set.Set[string] {
+	deps := project.MainDeps()
+	for _, groupDeps := range project.Tool.Poetry.Groups {
+		deps.Append(groupDeps.Dependencies.Items()...)
+	}
+	return deps
+}
+
+func prodPackages(app *types.Application, prodRootDeps set.Set[string]) set.Set[string] {
 	packages := lo.SliceToMap(app.Packages, func(pkg types.Package) (string, types.Package) {
 		return pkg.ID, pkg
 	})
 
-	visited := make(map[string]struct{})
-	deps := project.Tool.Poetry.Dependencies
-
-	for group, groupDeps := range project.Tool.Poetry.Groups {
-		if group == "dev" {
-			continue
-		}
-		deps = lo.Assign(deps, groupDeps.Dependencies)
-	}
+	visited := set.New[string]()
 
 	for _, pkg := range packages {
-		if _, prodDep := deps[pkg.Name]; !prodDep {
+		if !prodRootDeps.Contains(pkg.Name) {
 			continue
 		}
 		walkPackageDeps(pkg.ID, packages, visited)
 	}
 
-	app.Packages = lo.Filter(app.Packages, func(pkg types.Package, _ int) bool {
-		_, ok := visited[pkg.ID]
-		return ok
-	})
+	return visited
 }
 
-func walkPackageDeps(pkgID string, packages map[string]types.Package, visited map[string]struct{}) {
-	if _, ok := visited[pkgID]; ok {
+func walkPackageDeps(pkgID string, packages map[string]types.Package, visited set.Set[string]) {
+	if visited.Contains(pkgID) {
 		return
 	}
-	visited[pkgID] = struct{}{}
+	visited.Append(pkgID)
 	for _, dep := range packages[pkgID].DependsOn {
 		walkPackageDeps(dep, packages, visited)
 	}

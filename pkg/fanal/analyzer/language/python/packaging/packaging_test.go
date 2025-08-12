@@ -1,7 +1,6 @@
 package packaging
 
 import (
-	"context"
 	"os"
 	"testing"
 
@@ -133,7 +132,7 @@ func Test_packagingAnalyzer_Analyze(t *testing.T) {
 
 			a, err := newPackagingAnalyzer(analyzer.AnalyzerOptions{})
 			require.NoError(t, err)
-			got, err := a.PostAnalyze(context.Background(), analyzer.PostAnalysisInput{
+			got, err := a.PostAnalyze(t.Context(), analyzer.PostAnalysisInput{
 				FS: os.DirFS(tt.dir),
 				Options: analyzer.AnalysisOptions{
 					FileChecksum: tt.includeChecksum,
@@ -141,8 +140,7 @@ func Test_packagingAnalyzer_Analyze(t *testing.T) {
 			})
 
 			if tt.wantErr != "" {
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), tt.wantErr)
+				require.ErrorContains(t, err, tt.wantErr)
 				return
 			}
 			require.NoError(t, err)
@@ -161,6 +159,11 @@ func Test_packagingAnalyzer_Required(t *testing.T) {
 		{
 			name:     "egg",
 			filePath: "python2.7/site-packages/cssutils-1.0-py2.7.egg/EGG-INFO/PKG-INFO",
+			want:     true,
+		},
+		{
+			name:     "egg-info/METADATA",
+			filePath: "Amazon/AWSCLIV2/cryptography-3.3.2-py3.8.egg-info/METADATA",
 			want:     true,
 		},
 		{

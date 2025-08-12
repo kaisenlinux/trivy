@@ -1,9 +1,8 @@
 package analyzer_test
 
 import (
-	"context"
-	"fmt"
 	"os"
+	"slices"
 	"sync"
 	"testing"
 
@@ -26,6 +25,7 @@ import (
 	_ "github.com/aquasecurity/trivy/pkg/fanal/analyzer/os/alpine"
 	_ "github.com/aquasecurity/trivy/pkg/fanal/analyzer/os/ubuntu"
 	_ "github.com/aquasecurity/trivy/pkg/fanal/analyzer/pkg/apk"
+	_ "github.com/aquasecurity/trivy/pkg/fanal/analyzer/pkg/dpkg"
 	_ "github.com/aquasecurity/trivy/pkg/fanal/analyzer/repo/apk"
 	_ "github.com/aquasecurity/trivy/pkg/fanal/handler/all"
 	_ "modernc.org/sqlite"
@@ -342,6 +342,7 @@ func TestAnalyzerGroup_AnalyzeFile(t *testing.T) {
 								SrcName:    "musl",
 								SrcVersion: "1.1.24-r2",
 								Licenses:   []string{"MIT"},
+								Maintainer: "Timo Teräs <timo.teras@iki.fi>",
 								Arch:       "x86_64",
 								Digest:     "sha1:cb2316a189ebee5282c4a9bd98794cc2477a74c6",
 								InstalledFiles: []string{
@@ -522,8 +523,7 @@ func TestAnalyzerGroup_AnalyzeFile(t *testing.T) {
 				DisabledAnalyzers: tt.args.disabledAnalyzers,
 			})
 			if err != nil && tt.wantErr != "" {
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), tt.wantErr)
+				require.ErrorContains(t, err, tt.wantErr)
 				return
 			}
 			require.NoError(t, err)
@@ -531,15 +531,16 @@ func TestAnalyzerGroup_AnalyzeFile(t *testing.T) {
 			info, err := os.Stat(tt.args.testFilePath)
 			require.NoError(t, err)
 
-			ctx := context.Background()
+			ctx := t.Context()
 			err = a.AnalyzeFile(ctx, &wg, limit, got, "", tt.args.filePath, info,
 				func() (xio.ReadSeekCloserAt, error) {
-					if tt.args.testFilePath == "testdata/error" {
+					switch tt.args.testFilePath {
+					case "testdata/error":
 						return nil, xerrors.New("error")
-					} else if tt.args.testFilePath == "testdata/no-permission" {
-						os.Chmod(tt.args.testFilePath, 0000)
+					case "testdata/no-permission":
+						os.Chmod(tt.args.testFilePath, 0o000)
 						t.Cleanup(func() {
-							os.Chmod(tt.args.testFilePath, 0644)
+							os.Chmod(tt.args.testFilePath, 0o644)
 						})
 					}
 					return os.Open(tt.args.testFilePath)
@@ -549,8 +550,7 @@ func TestAnalyzerGroup_AnalyzeFile(t *testing.T) {
 
 			wg.Wait()
 			if tt.wantErr != "" {
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), tt.wantErr)
+				require.ErrorContains(t, err, tt.wantErr)
 				return
 			}
 
@@ -565,6 +565,7 @@ func TestAnalyzerGroup_PostAnalyze(t *testing.T) {
 		name         string
 		dir          string
 		analyzerType analyzer.Type
+		filePatterns []string
 		want         *analyzer.AnalysisResult
 	}{
 		{
@@ -588,11 +589,25 @@ func TestAnalyzerGroup_PostAnalyze(t *testing.T) {
 			},
 		},
 		{
-			name:         "poetry files with invalid file",
-			dir:          "testdata/post-apps/poetry/",
+			name: "poetry files with file from pattern and invalid file",
+			dir:  "testdata/post-apps/poetry/",
+			filePatterns: []string{
+				"poetry:poetry-pattern.lock",
+			},
 			analyzerType: analyzer.TypePoetry,
 			want: &analyzer.AnalysisResult{
 				Applications: []types.Application{
+					{
+						Type:     types.Poetry,
+						FilePath: "testdata/post-apps/poetry/happy/poetry-pattern.lock",
+						Packages: types.Packages{
+							{
+								ID:      "certifi@2022.12.7",
+								Name:    "certifi",
+								Version: "2022.12.7",
+							},
+						},
+					},
 					{
 						Type:     types.Poetry,
 						FilePath: "testdata/post-apps/poetry/happy/poetry.lock",
@@ -610,7 +625,9 @@ func TestAnalyzerGroup_PostAnalyze(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			a, err := analyzer.NewAnalyzerGroup(analyzer.AnalyzerOptions{})
+			a, err := analyzer.NewAnalyzerGroup(analyzer.AnalyzerOptions{
+				FilePatterns: tt.filePatterns,
+			})
 			require.NoError(t, err)
 
 			// Create a virtual filesystem
@@ -628,7 +645,7 @@ func TestAnalyzerGroup_PostAnalyze(t *testing.T) {
 				javadb.Init("./language/java/jar/testdata", []name.Reference{repo}, true, false, types.RegistryOptions{Insecure: false})
 			}
 
-			ctx := context.Background()
+			ctx := t.Context()
 			got := new(analyzer.AnalysisResult)
 			err = a.PostAnalyze(ctx, composite, got, analyzer.AnalysisOptions{})
 			require.NoError(t, err)
@@ -648,14 +665,16 @@ func TestAnalyzerGroup_AnalyzerVersions(t *testing.T) {
 			disabled: []analyzer.Type{},
 			want: analyzer.Versions{
 				Analyzers: map[string]int{
-					"alpine":     1,
-					"apk-repo":   1,
-					"apk":        2,
-					"bundler":    1,
-					"ubuntu":     1,
-					"ubuntu-esm": 1,
+					"alpine":       1,
+					"apk-repo":     1,
+					"apk":          3,
+					"bundler":      1,
+					"dpkg-license": 1,
+					"ubuntu":       1,
+					"ubuntu-esm":   1,
 				},
 				PostAnalyzers: map[string]int{
+					"dpkg":   5,
 					"jar":    1,
 					"poetry": 1,
 				},
@@ -666,13 +685,15 @@ func TestAnalyzerGroup_AnalyzerVersions(t *testing.T) {
 			disabled: []analyzer.Type{
 				analyzer.TypeAlpine,
 				analyzer.TypeApkRepo,
+				analyzer.TypeDpkg,
+				analyzer.TypeDpkgLicense,
 				analyzer.TypeUbuntu,
 				analyzer.TypeUbuntuESM,
 				analyzer.TypeJar,
 			},
 			want: analyzer.Versions{
 				Analyzers: map[string]int{
-					"apk":     2,
+					"apk":     3,
 					"bundler": 1,
 				},
 				PostAnalyzers: map[string]int{
@@ -688,8 +709,77 @@ func TestAnalyzerGroup_AnalyzerVersions(t *testing.T) {
 			})
 			require.NoError(t, err)
 			got := a.AnalyzerVersions()
-			fmt.Printf("%v\n", got)
 			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestAnalyzerGroup_StaticPaths tests the StaticPaths method of AnalyzerGroup
+func TestAnalyzerGroup_StaticPaths(t *testing.T) {
+	tests := []struct {
+		name              string
+		disabledAnalyzers []analyzer.Type
+		filePatterns      []string
+		want              []string
+		wantAllStatic     bool
+	}{
+		{
+			name:              "all analyzers including post-analyzers implement StaticPathAnalyzer",
+			disabledAnalyzers: []analyzer.Type{analyzer.TypeApkCommand, analyzer.TypeJar, analyzer.TypePoetry, analyzer.TypeBundler},
+			want: []string{
+				"etc/apk/repositories",
+				"etc/lsb-release",
+				"lib/apk/db/installed",
+				"usr/lib/apk/db/installed",
+				"etc/alpine-release",
+
+				"usr/share/doc/",
+				"var/lib/dpkg/status",
+				"var/lib/dpkg/status.d/",
+				"var/lib/dpkg/available",
+				"var/lib/dpkg/info/",
+				"var/lib/ubuntu-advantage/status.json",
+			},
+			wantAllStatic: true,
+		},
+		{
+			name:              "all analyzers implement StaticPathAnalyzer, but there is file pattern",
+			disabledAnalyzers: []analyzer.Type{analyzer.TypeApkCommand, analyzer.TypeJar, analyzer.TypePoetry, analyzer.TypeBundler},
+			filePatterns: []string{
+				"alpine:etc/alpine-release-custom",
+			},
+			want:          []string{},
+			wantAllStatic: false,
+		},
+		{
+			name:          "some analyzers don't implement StaticPathAnalyzer",
+			want:          []string{},
+			wantAllStatic: false,
+		},
+		{
+			name:              "disable all analyzers",
+			disabledAnalyzers: slices.Concat(analyzer.TypeOSes, analyzer.TypeLanguages),
+			want:              []string{},
+			wantAllStatic:     true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a new analyzer group
+			a, err := analyzer.NewAnalyzerGroup(analyzer.AnalyzerOptions{
+				FilePatterns: tt.filePatterns,
+			})
+			require.NoError(t, err)
+
+			// Get static paths
+			gotPaths, gotAllStatic := a.StaticPaths(tt.disabledAnalyzers)
+
+			// Check if all analyzers implement StaticPathAnalyzer
+			assert.Equal(t, tt.wantAllStatic, gotAllStatic)
+
+			// Check paths
+			assert.ElementsMatch(t, tt.want, gotPaths)
 		})
 	}
 }

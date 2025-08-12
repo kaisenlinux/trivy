@@ -5,8 +5,16 @@ import (
 	"slices"
 )
 
+var (
+	TokenIdent = Token{token: IDENT, literal: "IDENT"}
+	TokenAnd   = Token{token: AND, literal: "AND"}
+	TokenOR    = Token{token: OR, literal: "OR"}
+	TokenWith  = Token{token: WITH, literal: "WITH"}
+)
+
 type Expression interface {
 	String() string
+	IsSPDXExpression() bool
 }
 
 type Token struct {
@@ -35,10 +43,30 @@ func (s SimpleExpr) String() string {
 	return s.License
 }
 
+func (s SimpleExpr) IsSPDXExpression() bool {
+	return ValidateSPDXLicense(s.String())
+}
+
 type CompoundExpr struct {
 	left        Expression
 	conjunction Token
 	right       Expression
+}
+
+func NewCompoundExpr(left Expression, conjunction Token, right Expression) CompoundExpr {
+	return CompoundExpr{left: left, conjunction: conjunction, right: right}
+}
+
+func (c CompoundExpr) Conjunction() Token {
+	return c.conjunction
+}
+
+func (c CompoundExpr) Left() Expression {
+	return c.left
+}
+
+func (c CompoundExpr) Right() Expression {
+	return c.right
 }
 
 func (c CompoundExpr) String() string {
@@ -57,4 +85,12 @@ func (c CompoundExpr) String() string {
 		}
 	}
 	return fmt.Sprintf("%s %s %s", left, c.conjunction.literal, right)
+}
+
+func (c CompoundExpr) IsSPDXExpression() bool {
+	if c.conjunction.token == WITH {
+		// e.g. A WITH B
+		return c.left.IsSPDXExpression() && ValidateSPDXException(c.right.String())
+	}
+	return c.left.IsSPDXExpression() && c.right.IsSPDXExpression()
 }

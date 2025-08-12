@@ -1,11 +1,12 @@
 package flag
 
 import (
-	"fmt"
+	"errors"
 	"strconv"
 	"strings"
 
 	"github.com/samber/lo"
+	"golang.org/x/xerrors"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -172,14 +173,10 @@ func (f *K8sFlagGroup) Flags() []Flagger {
 	}
 }
 
-func (f *K8sFlagGroup) ToOptions() (K8sOptions, error) {
-	if err := parseFlags(f); err != nil {
-		return K8sOptions{}, err
-	}
-
+func (f *K8sFlagGroup) ToOptions(opts *Options) error {
 	tolerations, err := optionToTolerations(f.Tolerations.Value())
 	if err != nil {
-		return K8sOptions{}, err
+		return err
 	}
 
 	exludeNodeLabels := make(map[string]string)
@@ -187,18 +184,18 @@ func (f *K8sFlagGroup) ToOptions() (K8sOptions, error) {
 	for _, exludeNodeValue := range exludeNodes {
 		excludeNodeParts := strings.Split(exludeNodeValue, ":")
 		if len(excludeNodeParts) != 2 {
-			return K8sOptions{}, fmt.Errorf("exclude node %s must be a key:value", exludeNodeValue)
+			return xerrors.Errorf("exclude node %s must be a key:value", exludeNodeValue)
 		}
 		exludeNodeLabels[excludeNodeParts[0]] = excludeNodeParts[1]
 	}
 	if len(f.ExcludeNamespaces.Value()) > 0 && len(f.IncludeNamespaces.Value()) > 0 {
-		return K8sOptions{}, fmt.Errorf("include-namespaces and exclude-namespaces flags cannot be used together")
+		return xerrors.New("include-namespaces and exclude-namespaces flags cannot be used together")
 	}
 	if len(f.ExcludeKinds.Value()) > 0 && len(f.IncludeKinds.Value()) > 0 {
-		return K8sOptions{}, fmt.Errorf("include-kinds and exclude-kinds flags cannot be used together")
+		return xerrors.New("include-kinds and exclude-kinds flags cannot be used together")
 	}
 
-	return K8sOptions{
+	opts.K8sOptions = K8sOptions{
 		KubeConfig:             f.KubeConfig.Value(),
 		K8sVersion:             f.K8sVersion.Value(),
 		Tolerations:            tolerations,
@@ -214,7 +211,8 @@ func (f *K8sFlagGroup) ToOptions() (K8sOptions, error) {
 		ExcludeNamespaces:      f.ExcludeNamespaces.Value(),
 		IncludeNamespaces:      f.IncludeNamespaces.Value(),
 		Burst:                  f.Burst.Value(),
-	}, nil
+	}
+	return nil
 }
 
 func optionToTolerations(tolerationsOptions []string) ([]corev1.Toleration, error) {
@@ -222,12 +220,12 @@ func optionToTolerations(tolerationsOptions []string) ([]corev1.Toleration, erro
 	for _, toleration := range tolerationsOptions {
 		tolerationParts := strings.Split(toleration, ":")
 		if len(tolerationParts) < 2 {
-			return []corev1.Toleration{}, fmt.Errorf("toleration must include key and effect")
+			return []corev1.Toleration{}, errors.New("toleration must include key and effect")
 		}
 		if corev1.TaintEffect(tolerationParts[1]) != corev1.TaintEffectNoSchedule &&
 			corev1.TaintEffect(tolerationParts[1]) != corev1.TaintEffectPreferNoSchedule &&
 			corev1.TaintEffect(tolerationParts[1]) != corev1.TaintEffectNoExecute {
-			return []corev1.Toleration{}, fmt.Errorf("toleration effect must be a valid value")
+			return []corev1.Toleration{}, errors.New("toleration effect must be a valid value")
 		}
 		keyValue := strings.Split(tolerationParts[0], "=")
 		operator := corev1.TolerationOpEqual
@@ -245,7 +243,7 @@ func optionToTolerations(tolerationsOptions []string) ([]corev1.Toleration, erro
 		if len(tolerationParts) == 3 {
 			tolerationSec, err = strconv.Atoi(tolerationParts[2])
 			if err != nil {
-				return nil, fmt.Errorf("TolerationSeconds must must be a number")
+				return nil, errors.New("TolerationSeconds must must be a number")
 			}
 			toleration.TolerationSeconds = lo.ToPtr(int64(tolerationSec))
 		}

@@ -12,14 +12,16 @@ var (
 		Usage:      "AWS Endpoint override",
 	}
 	awsServiceFlag = Flag[[]string]{
-		Name:       "service",
-		ConfigName: "cloud.aws.service",
-		Usage:      "Only scan AWS Service(s) specified with this flag. Can specify multiple services using --service A --service B etc.",
+		Name:          "service",
+		ConfigName:    "cloud.aws.service",
+		Usage:         "Only scan AWS Service(s) specified with this flag. Can specify multiple services using --service A --service B etc.",
+		TelemetrySafe: true,
 	}
 	awsSkipServicesFlag = Flag[[]string]{
-		Name:       "skip-service",
-		ConfigName: "cloud.aws.skip-service",
-		Usage:      "Skip selected AWS Service(s) specified with this flag. Can specify multiple services using --skip-service A --skip-service B etc.",
+		Name:          "skip-service",
+		ConfigName:    "cloud.aws.skip-service",
+		Usage:         "Skip selected AWS Service(s) specified with this flag. Can specify multiple services using --skip-service A --skip-service B etc.",
+		TelemetrySafe: true,
 	}
 	awsAccountFlag = Flag[string]{
 		Name:       "account",
@@ -77,16 +79,14 @@ func (f *AWSFlagGroup) Flags() []Flagger {
 	}
 }
 
-func (f *AWSFlagGroup) ToOptions() (AWSOptions, error) {
-	if err := parseFlags(f); err != nil {
-		return AWSOptions{}, err
-	}
-	return AWSOptions{
+func (f *AWSFlagGroup) ToOptions(opts *Options) error {
+	opts.AWSOptions = AWSOptions{
 		Region:       f.Region.Value(),
 		Endpoint:     f.Endpoint.Value(),
 		Services:     f.Services.Value(),
 		SkipServices: f.SkipServices.Value(),
 		Account:      f.Account.Value(),
 		ARN:          f.ARN.Value(),
-	}, nil
+	}
+	return nil
 }

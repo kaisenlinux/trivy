@@ -1,6 +1,7 @@
 package applier
 
 import (
+	"cmp"
 	"fmt"
 	"strings"
 	"time"
@@ -13,7 +14,9 @@ import (
 	ftypes "github.com/aquasecurity/trivy/pkg/fanal/types"
 	"github.com/aquasecurity/trivy/pkg/log"
 	"github.com/aquasecurity/trivy/pkg/purl"
+	"github.com/aquasecurity/trivy/pkg/scan/utils"
 	"github.com/aquasecurity/trivy/pkg/types"
+	xslices "github.com/aquasecurity/trivy/pkg/x/slices"
 )
 
 type Config struct {
@@ -31,9 +34,10 @@ type History struct {
 }
 
 func findPackage(e ftypes.Package, s []ftypes.Package) *ftypes.Package {
-	for _, a := range s {
+	for i := range s {
+		a := &s[i] // do not range by value to avoid heap allocations
 		if a.Name == e.Name && a.Version == e.Version && a.Release == e.Release {
-			return &a
+			return a
 		}
 	}
 	return nil
@@ -67,7 +71,7 @@ func lookupBuildInfo(index int, layers []ftypes.BlobInfo) *ftypes.BuildInfo {
 
 	// Customer's layers build on top of Red Hat image are also missing content sets
 	//   - it needs to be shared from the last Red Hat's layers which contains content sets
-	for i := index - 1; i >= 1; i-- {
+	for i := index - 1; i >= 0; i-- {
 		if layers[i].BuildInfo != nil {
 			return layers[i].BuildInfo
 		}
@@ -231,6 +235,14 @@ func ApplyLayers(layers []ftypes.BlobInfo) ftypes.ArtifactDetail {
 		}
 	}
 
+	// De-duplicate same debian packages from different dirs
+	// cf. https://github.com/aquasecurity/trivy/issues/8297
+	mergedLayer.Packages = xslices.ZeroToNil(lo.UniqBy(mergedLayer.Packages, func(pkg ftypes.Package) string {
+		id := cmp.Or(pkg.ID, fmt.Sprintf("%s@%s", pkg.Name, utils.FormatVersion(pkg)))
+		// To avoid deduplicating packages with the same ID but from different locations (e.g. RPM archives), check the file path.
+		return fmt.Sprintf("%s/%s", id, pkg.FilePath)
+	}))
+
 	for _, app := range mergedLayer.Applications {
 		for i, pkg := range app.Packages {
 			// Skip lookup for SBOM
@@ -251,10 +263,19 @@ func ApplyLayers(layers []ftypes.BlobInfo) ftypes.ArtifactDetail {
 	// Aggregate python/ruby/node.js packages and JAR files
 	aggregate(&mergedLayer)
 
+	mergedLayer.Sort()
+
 	return mergedLayer
 }
 
 func newPURL(pkgType ftypes.TargetType, metadata types.Metadata, pkg ftypes.Package) *packageurl.PackageURL {
+	// Possible cases when package doesn't have name/version (e.g. local package.json).
+	// For these cases we don't need to create PURL, because this PURL will be incorrect.
+	// TODO Dmitriy - move to `purl` package
+	if pkg.Name == "" {
+		return nil
+	}
+
 	p, err := purl.New(pkgType, metadata, pkg)
 	if err != nil {
 		log.Error("Failed to create PackageURL", log.Err(err))

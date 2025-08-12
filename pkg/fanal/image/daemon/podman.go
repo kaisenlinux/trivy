@@ -12,7 +12,10 @@ import (
 
 	api "github.com/docker/docker/api/types"
 	dimage "github.com/docker/docker/api/types/image"
+	"github.com/docker/docker/client"
 	"golang.org/x/xerrors"
+
+	xos "github.com/aquasecurity/trivy/pkg/x/os"
 )
 
 var (
@@ -98,7 +101,7 @@ func (p podmanClient) imageHistoryInspect(imageName string) ([]dimage.HistoryRes
 	return history, nil
 }
 
-func (p podmanClient) imageSave(_ context.Context, imageNames []string) (io.ReadCloser, error) {
+func (p podmanClient) imageSave(_ context.Context, imageNames []string, _ ...client.ImageSaveOption) (io.ReadCloser, error) {
 	if len(imageNames) < 1 {
 		return nil, xerrors.Errorf("no specified image")
 	}
@@ -129,7 +132,7 @@ func PodmanImage(ref, host string) (Image, func(), error) {
 		return nil, cleanup, xerrors.Errorf("unable to inspect the image (%s): %w", ref, err)
 	}
 
-	f, err := os.CreateTemp("", "fanal-*")
+	f, err := xos.CreateTemp("", "podman-export-")
 	if err != nil {
 		return nil, cleanup, xerrors.Errorf("failed to create a temporary file: %w", err)
 	}

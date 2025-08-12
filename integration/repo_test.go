@@ -3,47 +3,51 @@
 package integration
 
 import (
-	"fmt"
 	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/aquasecurity/trivy/pkg/fanal/artifact"
+	ftypes "github.com/aquasecurity/trivy/pkg/fanal/types"
 	"github.com/aquasecurity/trivy/pkg/types"
 )
 
+type repoTestArgs struct {
+	scanner             types.Scanner
+	ignoreIDs           []string
+	policyPaths         []string
+	namespaces          []string
+	listAllPkgs         bool
+	input               string
+	secretConfig        string
+	filePatterns        []string
+	helmSet             []string
+	helmValuesFile      []string
+	skipFiles           []string
+	skipDirs            []string
+	command             string
+	format              types.Format
+	includeDevDeps      bool
+	parallel            int
+	vex                 string
+	vulnSeveritySources []string
+}
+
 // TestRepository tests `trivy repo` with the local code repositories
 func TestRepository(t *testing.T) {
-	type args struct {
-		scanner        types.Scanner
-		ignoreIDs      []string
-		policyPaths    []string
-		namespaces     []string
-		listAllPkgs    bool
-		input          string
-		secretConfig   string
-		filePatterns   []string
-		helmSet        []string
-		helmValuesFile []string
-		skipFiles      []string
-		skipDirs       []string
-		command        string
-		format         types.Format
-		includeDevDeps bool
-		parallel       int
-		vex            string
-	}
+	t.Setenv("NUGET_PACKAGES", t.TempDir())
 	tests := []struct {
 		name     string
-		args     args
+		args     repoTestArgs
 		golden   string
 		override func(t *testing.T, want, got *types.Report)
 	}{
 		{
 			name: "gomod",
-			args: args{
+			args: repoTestArgs{
 				scanner: types.VulnerabilityScanner,
 				input:   "testdata/fixtures/repo/gomod",
 			},
@@ -51,7 +55,7 @@ func TestRepository(t *testing.T) {
 		},
 		{
 			name: "gomod with skip files",
-			args: args{
+			args: repoTestArgs{
 				scanner:   types.VulnerabilityScanner,
 				input:     "testdata/fixtures/repo/gomod",
 				skipFiles: []string{"testdata/fixtures/repo/gomod/submod2/go.mod"},
@@ -60,7 +64,7 @@ func TestRepository(t *testing.T) {
 		},
 		{
 			name: "gomod with skip dirs",
-			args: args{
+			args: repoTestArgs{
 				scanner:  types.VulnerabilityScanner,
 				input:    "testdata/fixtures/repo/gomod",
 				skipDirs: []string{"testdata/fixtures/repo/gomod/submod2"},
@@ -69,7 +73,7 @@ func TestRepository(t *testing.T) {
 		},
 		{
 			name: "gomod in series",
-			args: args{
+			args: repoTestArgs{
 				scanner:  types.VulnerabilityScanner,
 				input:    "testdata/fixtures/repo/gomod",
 				parallel: 1,
@@ -78,7 +82,7 @@ func TestRepository(t *testing.T) {
 		},
 		{
 			name: "gomod with local VEX file",
-			args: args{
+			args: repoTestArgs{
 				scanner: types.VulnerabilityScanner,
 				input:   "testdata/fixtures/repo/gomod",
 				vex:     "testdata/fixtures/vex/file/openvex.json",
@@ -87,7 +91,7 @@ func TestRepository(t *testing.T) {
 		},
 		{
 			name: "gomod with VEX repository",
-			args: args{
+			args: repoTestArgs{
 				scanner: types.VulnerabilityScanner,
 				input:   "testdata/fixtures/repo/gomod",
 				vex:     "repo",
@@ -96,7 +100,7 @@ func TestRepository(t *testing.T) {
 		},
 		{
 			name: "npm",
-			args: args{
+			args: repoTestArgs{
 				scanner:     types.VulnerabilityScanner,
 				input:       "testdata/fixtures/repo/npm",
 				listAllPkgs: true,
@@ -104,8 +108,20 @@ func TestRepository(t *testing.T) {
 			golden: "testdata/npm.json.golden",
 		},
 		{
+			name: "npm with severity from ubuntu",
+			args: repoTestArgs{
+				scanner: types.VulnerabilityScanner,
+				input:   "testdata/fixtures/repo/npm",
+				vulnSeveritySources: []string{
+					"alpine",
+					"ubuntu",
+				},
+			},
+			golden: "testdata/npm-ubuntu-severity.json.golden",
+		},
+		{
 			name: "npm with dev deps",
-			args: args{
+			args: repoTestArgs{
 				scanner:        types.VulnerabilityScanner,
 				input:          "testdata/fixtures/repo/npm",
 				listAllPkgs:    true,
@@ -115,7 +131,7 @@ func TestRepository(t *testing.T) {
 		},
 		{
 			name: "yarn",
-			args: args{
+			args: repoTestArgs{
 				scanner:     types.VulnerabilityScanner,
 				input:       "testdata/fixtures/repo/yarn",
 				listAllPkgs: true,
@@ -124,7 +140,7 @@ func TestRepository(t *testing.T) {
 		},
 		{
 			name: "pnpm",
-			args: args{
+			args: repoTestArgs{
 				scanner:     types.VulnerabilityScanner,
 				input:       "testdata/fixtures/repo/pnpm",
 				listAllPkgs: true,
@@ -132,8 +148,17 @@ func TestRepository(t *testing.T) {
 			golden: "testdata/pnpm.json.golden",
 		},
 		{
+			name: "bun",
+			args: repoTestArgs{
+				scanner:     types.VulnerabilityScanner,
+				input:       "testdata/fixtures/repo/bun",
+				listAllPkgs: true,
+			},
+			golden: "testdata/bun.json.golden",
+		},
+		{
 			name: "pip",
-			args: args{
+			args: repoTestArgs{
 				scanner:     types.VulnerabilityScanner,
 				listAllPkgs: true,
 				input:       "testdata/fixtures/repo/pip",
@@ -142,7 +167,7 @@ func TestRepository(t *testing.T) {
 		},
 		{
 			name: "pipenv",
-			args: args{
+			args: repoTestArgs{
 				scanner:     types.VulnerabilityScanner,
 				listAllPkgs: true,
 				input:       "testdata/fixtures/repo/pipenv",
@@ -151,7 +176,7 @@ func TestRepository(t *testing.T) {
 		},
 		{
 			name: "poetry",
-			args: args{
+			args: repoTestArgs{
 				scanner:     types.VulnerabilityScanner,
 				listAllPkgs: true,
 				input:       "testdata/fixtures/repo/poetry",
@@ -159,8 +184,17 @@ func TestRepository(t *testing.T) {
 			golden: "testdata/poetry.json.golden",
 		},
 		{
+			name: "uv",
+			args: repoTestArgs{
+				scanner:     types.VulnerabilityScanner,
+				listAllPkgs: true,
+				input:       "testdata/fixtures/repo/uv",
+			},
+			golden: "testdata/uv.json.golden",
+		},
+		{
 			name: "pom",
-			args: args{
+			args: repoTestArgs{
 				scanner: types.VulnerabilityScanner,
 				input:   "testdata/fixtures/repo/pom",
 			},
@@ -168,7 +202,7 @@ func TestRepository(t *testing.T) {
 		},
 		{
 			name: "gradle",
-			args: args{
+			args: repoTestArgs{
 				scanner: types.VulnerabilityScanner,
 				input:   "testdata/fixtures/repo/gradle",
 			},
@@ -176,7 +210,7 @@ func TestRepository(t *testing.T) {
 		},
 		{
 			name: "sbt",
-			args: args{
+			args: repoTestArgs{
 				scanner: types.VulnerabilityScanner,
 				input:   "testdata/fixtures/repo/sbt",
 			},
@@ -184,7 +218,7 @@ func TestRepository(t *testing.T) {
 		},
 		{
 			name: "conan",
-			args: args{
+			args: repoTestArgs{
 				scanner:     types.VulnerabilityScanner,
 				listAllPkgs: true,
 				input:       "testdata/fixtures/repo/conan",
@@ -193,7 +227,7 @@ func TestRepository(t *testing.T) {
 		},
 		{
 			name: "nuget",
-			args: args{
+			args: repoTestArgs{
 				scanner:     types.VulnerabilityScanner,
 				listAllPkgs: true,
 				input:       "testdata/fixtures/repo/nuget",
@@ -202,7 +236,7 @@ func TestRepository(t *testing.T) {
 		},
 		{
 			name: "dotnet",
-			args: args{
+			args: repoTestArgs{
 				scanner:     types.VulnerabilityScanner,
 				listAllPkgs: true,
 				input:       "testdata/fixtures/repo/dotnet",
@@ -211,7 +245,7 @@ func TestRepository(t *testing.T) {
 		},
 		{
 			name: "packages-props",
-			args: args{
+			args: repoTestArgs{
 				scanner:     types.VulnerabilityScanner,
 				listAllPkgs: true,
 				input:       "testdata/fixtures/repo/packagesprops",
@@ -220,7 +254,7 @@ func TestRepository(t *testing.T) {
 		},
 		{
 			name: "swift",
-			args: args{
+			args: repoTestArgs{
 				scanner:     types.VulnerabilityScanner,
 				listAllPkgs: true,
 				input:       "testdata/fixtures/repo/swift",
@@ -229,7 +263,7 @@ func TestRepository(t *testing.T) {
 		},
 		{
 			name: "cocoapods",
-			args: args{
+			args: repoTestArgs{
 				scanner:     types.VulnerabilityScanner,
 				listAllPkgs: true,
 				input:       "testdata/fixtures/repo/cocoapods",
@@ -238,7 +272,7 @@ func TestRepository(t *testing.T) {
 		},
 		{
 			name: "pubspec.lock",
-			args: args{
+			args: repoTestArgs{
 				scanner:     types.VulnerabilityScanner,
 				listAllPkgs: true,
 				input:       "testdata/fixtures/repo/pubspec",
@@ -247,7 +281,7 @@ func TestRepository(t *testing.T) {
 		},
 		{
 			name: "mix.lock",
-			args: args{
+			args: repoTestArgs{
 				scanner:     types.VulnerabilityScanner,
 				listAllPkgs: true,
 				input:       "testdata/fixtures/repo/mixlock",
@@ -256,7 +290,7 @@ func TestRepository(t *testing.T) {
 		},
 		{
 			name: "composer.lock",
-			args: args{
+			args: repoTestArgs{
 				scanner:     types.VulnerabilityScanner,
 				listAllPkgs: true,
 				input:       "testdata/fixtures/repo/composer",
@@ -264,16 +298,29 @@ func TestRepository(t *testing.T) {
 			golden: "testdata/composer.lock.json.golden",
 		},
 		{
+			name: "cargo.lock",
+			args: repoTestArgs{
+				scanner:     types.VulnerabilityScanner,
+				listAllPkgs: true,
+				input:       "testdata/fixtures/repo/cargo",
+			},
+			golden: "testdata/cargo.lock.json.golden",
+		},
+		{
 			name: "multiple lockfiles",
-			args: args{
+			args: repoTestArgs{
 				scanner: types.VulnerabilityScanner,
 				input:   "testdata/fixtures/repo/trivy-ci-test",
 			},
 			golden: "testdata/test-repo.json.golden",
+			override: func(_ *testing.T, want, _ *types.Report) {
+				// Clear all metadata as this is a local directory scan without git info
+				want.Metadata = types.Metadata{}
+			},
 		},
 		{
 			name: "installed.json",
-			args: args{
+			args: repoTestArgs{
 				command:     "rootfs",
 				scanner:     types.VulnerabilityScanner,
 				listAllPkgs: true,
@@ -283,7 +330,7 @@ func TestRepository(t *testing.T) {
 		},
 		{
 			name: "dockerfile",
-			args: args{
+			args: repoTestArgs{
 				scanner:    types.MisconfigScanner,
 				input:      "testdata/fixtures/repo/dockerfile",
 				namespaces: []string{"testing"},
@@ -292,7 +339,7 @@ func TestRepository(t *testing.T) {
 		},
 		{
 			name: "dockerfile with custom file pattern",
-			args: args{
+			args: repoTestArgs{
 				scanner:      types.MisconfigScanner,
 				input:        "testdata/fixtures/repo/dockerfile_file_pattern",
 				namespaces:   []string{"testing"},
@@ -302,7 +349,7 @@ func TestRepository(t *testing.T) {
 		},
 		{
 			name: "dockerfile with custom policies",
-			args: args{
+			args: repoTestArgs{
 				scanner:     types.MisconfigScanner,
 				policyPaths: []string{"testdata/fixtures/repo/custom-policy/policy"},
 				namespaces:  []string{"user"},
@@ -312,7 +359,7 @@ func TestRepository(t *testing.T) {
 		},
 		{
 			name: "tarball helm chart scanning with builtin policies",
-			args: args{
+			args: repoTestArgs{
 				scanner: types.MisconfigScanner,
 				input:   "testdata/fixtures/repo/helm",
 			},
@@ -320,7 +367,7 @@ func TestRepository(t *testing.T) {
 		},
 		{
 			name: "helm chart directory scanning with builtin policies",
-			args: args{
+			args: repoTestArgs{
 				scanner: types.MisconfigScanner,
 				input:   "testdata/fixtures/repo/helm_testchart",
 			},
@@ -328,7 +375,7 @@ func TestRepository(t *testing.T) {
 		},
 		{
 			name: "helm chart directory scanning with value overrides using set",
-			args: args{
+			args: repoTestArgs{
 				scanner: types.MisconfigScanner,
 				input:   "testdata/fixtures/repo/helm_testchart",
 				helmSet: []string{"securityContext.runAsUser=0"},
@@ -337,7 +384,7 @@ func TestRepository(t *testing.T) {
 		},
 		{
 			name: "helm chart directory scanning with value overrides using value file",
-			args: args{
+			args: repoTestArgs{
 				scanner:        types.MisconfigScanner,
 				input:          "testdata/fixtures/repo/helm_testchart",
 				helmValuesFile: []string{"testdata/fixtures/repo/helm_values/values.yaml"},
@@ -346,7 +393,7 @@ func TestRepository(t *testing.T) {
 		},
 		{
 			name: "helm chart directory scanning with builtin policies and non string Chart name",
-			args: args{
+			args: repoTestArgs{
 				scanner: types.MisconfigScanner,
 				input:   "testdata/fixtures/repo/helm_badname",
 			},
@@ -354,7 +401,7 @@ func TestRepository(t *testing.T) {
 		},
 		{
 			name: "secrets",
-			args: args{
+			args: repoTestArgs{
 				scanner:      "vuln,secret",
 				input:        "testdata/fixtures/repo/secrets",
 				secretConfig: "testdata/fixtures/repo/secrets/trivy-secret.yaml",
@@ -363,7 +410,7 @@ func TestRepository(t *testing.T) {
 		},
 		{
 			name: "conda generating CycloneDX SBOM",
-			args: args{
+			args: repoTestArgs{
 				command: "rootfs",
 				format:  "cyclonedx",
 				input:   "testdata/fixtures/repo/conda",
@@ -372,7 +419,7 @@ func TestRepository(t *testing.T) {
 		},
 		{
 			name: "conda environment.yaml generating CycloneDX SBOM",
-			args: args{
+			args: repoTestArgs{
 				command: "fs",
 				format:  "cyclonedx",
 				input:   "testdata/fixtures/repo/conda-environment",
@@ -381,7 +428,7 @@ func TestRepository(t *testing.T) {
 		},
 		{
 			name: "pom.xml generating CycloneDX SBOM (with vulnerabilities)",
-			args: args{
+			args: repoTestArgs{
 				command: "fs",
 				scanner: types.VulnerabilityScanner,
 				format:  "cyclonedx",
@@ -391,7 +438,7 @@ func TestRepository(t *testing.T) {
 		},
 		{
 			name: "conda generating SPDX SBOM",
-			args: args{
+			args: repoTestArgs{
 				command: "rootfs",
 				format:  "spdx-json",
 				input:   "testdata/fixtures/repo/conda",
@@ -400,7 +447,7 @@ func TestRepository(t *testing.T) {
 		},
 		{
 			name: "gomod with fs subcommand",
-			args: args{
+			args: repoTestArgs{
 				command:   "fs",
 				scanner:   types.VulnerabilityScanner,
 				input:     "testdata/fixtures/repo/gomod",
@@ -408,12 +455,12 @@ func TestRepository(t *testing.T) {
 			},
 			golden: "testdata/gomod-skip.json.golden",
 			override: func(_ *testing.T, want, _ *types.Report) {
-				want.ArtifactType = artifact.TypeFilesystem
+				want.ArtifactType = ftypes.TypeFilesystem
 			},
 		},
 		{
 			name: "dockerfile with fs subcommand and an alias scanner",
-			args: args{
+			args: repoTestArgs{
 				command:     "fs",
 				scanner:     "config", // for backward compatibility
 				policyPaths: []string{"testdata/fixtures/repo/custom-policy/policy"},
@@ -421,13 +468,13 @@ func TestRepository(t *testing.T) {
 				input:       "testdata/fixtures/repo/custom-policy",
 			},
 			golden: "testdata/dockerfile-custom-policies.json.golden",
-			override: func(_ *testing.T, want, got *types.Report) {
-				want.ArtifactType = artifact.TypeFilesystem
+			override: func(_ *testing.T, want, _ *types.Report) {
+				want.ArtifactType = ftypes.TypeFilesystem
 			},
 		},
 		{
 			name: "julia generating SPDX SBOM",
-			args: args{
+			args: repoTestArgs{
 				command: "rootfs",
 				format:  "spdx-json",
 				input:   "testdata/fixtures/repo/julia",
@@ -460,89 +507,7 @@ func TestRepository(t *testing.T) {
 				format = tt.args.format
 			}
 
-			osArgs := []string{
-				"-q",
-				"--cache-dir",
-				cacheDir,
-				command,
-				"--skip-db-update",
-				"--skip-policy-update",
-				"--format",
-				string(format),
-				"--parallel",
-				fmt.Sprint(tt.args.parallel),
-				"--offline-scan",
-				tt.args.input,
-			}
-
-			if tt.args.scanner != "" {
-				osArgs = append(osArgs, "--scanners", string(tt.args.scanner))
-			}
-
-			if len(tt.args.policyPaths) != 0 {
-				for _, policyPath := range tt.args.policyPaths {
-					osArgs = append(osArgs, "--config-policy", policyPath)
-				}
-			}
-
-			if len(tt.args.namespaces) != 0 {
-				for _, namespace := range tt.args.namespaces {
-					osArgs = append(osArgs, "--policy-namespaces", namespace)
-				}
-			}
-
-			if len(tt.args.ignoreIDs) != 0 {
-				trivyIgnore := ".trivyignore"
-				err := os.WriteFile(trivyIgnore, []byte(strings.Join(tt.args.ignoreIDs, "\n")), 0444)
-				require.NoError(t, err, "failed to write .trivyignore")
-				defer os.Remove(trivyIgnore)
-			}
-
-			if len(tt.args.filePatterns) != 0 {
-				for _, filePattern := range tt.args.filePatterns {
-					osArgs = append(osArgs, "--file-patterns", filePattern)
-				}
-			}
-
-			if len(tt.args.helmSet) != 0 {
-				for _, helmSet := range tt.args.helmSet {
-					osArgs = append(osArgs, "--helm-set", helmSet)
-				}
-			}
-
-			if len(tt.args.helmValuesFile) != 0 {
-				for _, helmValuesFile := range tt.args.helmValuesFile {
-					osArgs = append(osArgs, "--helm-values", helmValuesFile)
-				}
-			}
-
-			if len(tt.args.skipFiles) != 0 {
-				for _, skipFile := range tt.args.skipFiles {
-					osArgs = append(osArgs, "--skip-files", skipFile)
-				}
-			}
-
-			if len(tt.args.skipDirs) != 0 {
-				for _, skipDir := range tt.args.skipDirs {
-					osArgs = append(osArgs, "--skip-dirs", skipDir)
-				}
-			}
-
-			if tt.args.listAllPkgs {
-				osArgs = append(osArgs, "--list-all-pkgs")
-			}
-
-			if tt.args.includeDevDeps {
-				osArgs = append(osArgs, "--include-dev-deps")
-			}
-
-			if tt.args.secretConfig != "" {
-				osArgs = append(osArgs, "--secret-config", tt.args.secretConfig)
-			}
-
-			if tt.args.vex != "" {
-				osArgs = append(osArgs, "--vex", tt.args.vex)
-			}
+			osArgs := buildArgs(t, cacheDir, command, format, tt.args)
 
 			runTest(t, osArgs, tt.golden, "", format, runOptions{
 				fakeUUID: "3ff14136-e09f-4df9-80ea-%012d",
@@ -550,4 +515,79 @@ func TestRepository(t *testing.T) {
 			})
 		})
 	}
+}
+
+func buildArgs(t *testing.T, cacheDir, command string, format types.Format, testArgs repoTestArgs) []string {
+	// Build base arguments
+	osArgs := []string{
+		"-q",
+		"--cache-dir",
+		cacheDir,
+		command,
+		"--skip-db-update",
+		"--skip-policy-update",
+		"--format",
+		string(format),
+		"--parallel",
+		strconv.Itoa(testArgs.parallel),
+		"--offline-scan",
+		testArgs.input,
+	}
+
+	if testArgs.scanner != "" {
+		osArgs = append(osArgs, "--scanners", string(testArgs.scanner))
+	}
+
+	for _, policyPath := range testArgs.policyPaths {
+		osArgs = append(osArgs, "--config-policy", policyPath)
+	}
+	for _, namespace := range testArgs.namespaces {
+		osArgs = append(osArgs, "--policy-namespaces", namespace)
+	}
+
+	// Handle ignore file using temporary directory
+	if len(testArgs.ignoreIDs) != 0 {
+		trivyIgnore := filepath.Join(t.TempDir(), ".trivyignore")
+		err := os.WriteFile(trivyIgnore, []byte(strings.Join(testArgs.ignoreIDs, "\n")), 0o444)
+		require.NoError(t, err, "failed to write .trivyignore")
+		osArgs = append(osArgs, "--ignorefile", trivyIgnore)
+	}
+
+	for _, filePattern := range testArgs.filePatterns {
+		osArgs = append(osArgs, "--file-patterns", filePattern)
+	}
+
+	for _, hs := range testArgs.helmSet {
+		osArgs = append(osArgs, "--helm-set", hs)
+	}
+	for _, hvf := range testArgs.helmValuesFile {
+		osArgs = append(osArgs, "--helm-values", hvf)
+	}
+
+	for _, skipFile := range testArgs.skipFiles {
+		osArgs = append(osArgs, "--skip-files", skipFile)
+	}
+	for _, skipDir := range testArgs.skipDirs {
+		osArgs = append(osArgs, "--skip-dirs", skipDir)
+	}
+
+	if len(testArgs.vulnSeveritySources) != 0 {
+		osArgs = append(osArgs,
+			"--vuln-severity-source", strings.Join(testArgs.vulnSeveritySources, ","),
+		)
+	}
+	if testArgs.listAllPkgs {
+		osArgs = append(osArgs, "--list-all-pkgs")
+	}
+	if testArgs.includeDevDeps {
+		osArgs = append(osArgs, "--include-dev-deps")
+	}
+	if testArgs.secretConfig != "" {
+		osArgs = append(osArgs, "--secret-config", testArgs.secretConfig)
+	}
+	if testArgs.vex != "" {
+		osArgs = append(osArgs, "--vex", testArgs.vex)
+	}
+
+	return osArgs
 }

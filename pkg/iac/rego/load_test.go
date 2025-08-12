@@ -9,7 +9,7 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/open-policy-agent/opa/ast"
+	"github.com/open-policy-agent/opa/v1/ast"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -30,7 +30,6 @@ func Test_RegoScanning_WithSomeInvalidPolicies(t *testing.T) {
 		var debugBuf bytes.Buffer
 		slog.SetDefault(log.New(log.NewHandler(&debugBuf, nil)))
 		scanner := rego.NewScanner(
-			types.SourceDockerfile,
 			rego.WithRegoErrorLimits(0),
 			rego.WithPolicyDirs("."),
 		)
@@ -44,7 +43,6 @@ func Test_RegoScanning_WithSomeInvalidPolicies(t *testing.T) {
 		var debugBuf bytes.Buffer
 		slog.SetDefault(log.New(log.NewHandler(&debugBuf, nil)))
 		scanner := rego.NewScanner(
-			types.SourceDockerfile,
 			rego.WithRegoErrorLimits(1),
 			rego.WithPolicyDirs("."),
 		)
@@ -65,7 +63,6 @@ deny {
     input.evil == "foo bar"
 }`
 		scanner := rego.NewScanner(
-			types.SourceJSON,
 			rego.WithPolicyDirs("."),
 			rego.WithPolicyReader(strings.NewReader(check)),
 		)
@@ -84,7 +81,6 @@ deny {
     input.evil == "foo bar"
 }`
 		scanner := rego.NewScanner(
-			types.SourceJSON,
 			rego.WithPolicyDirs("."),
 			rego.WithPolicyReader(strings.NewReader(check)),
 		)
@@ -106,14 +102,12 @@ deny {
     input.evil == "foo bar"
 }`
 		scanner := rego.NewScanner(
-			types.SourceJSON,
 			rego.WithPolicyDirs("."),
 			rego.WithPolicyReader(strings.NewReader(check)),
 		)
 		err := scanner.LoadPolicies(fstest.MapFS{})
 		require.NoError(t, err)
 	})
-
 }
 
 func Test_FallbackToEmbedded(t *testing.T) {
@@ -195,7 +189,6 @@ deny {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			scanner := rego.NewScanner(
-				types.SourceDockerfile,
 				rego.WithRegoErrorLimits(0),
 				rego.WithEmbeddedPolicies(false),
 				rego.WithPolicyDirs("."),
@@ -213,7 +206,11 @@ deny {
 					}`),
 			}
 
+			originalFS := checks.EmbeddedPolicyFileSystem
 			checks.EmbeddedPolicyFileSystem = embeddedChecksFS
+			t.Cleanup(func() {
+				checks.EmbeddedPolicyFileSystem = originalFS
+			})
 			err := scanner.LoadPolicies(fstest.MapFS(tt.files))
 
 			if tt.expectedErr != "" {
@@ -240,7 +237,7 @@ func Test_FallbackErrorWithoutLocation(t *testing.T) {
 		},
 	}
 
-	for i := 0; i < ast.CompileErrorLimitDefault+1; i++ {
+	for i := range ast.CompileErrorLimitDefault + 1 {
 		src := `# METADATA
 # schemas:
 # - input: schema["fooschema"]
@@ -250,15 +247,126 @@ deny {
 	input.evil == "foo bar"
 }`
 		fsys[fmt.Sprintf("policies/my-check%d.rego", i)] = &fstest.MapFile{
-			Data: []byte(fmt.Sprintf(src, i)),
+			Data: fmt.Appendf(nil, src, i),
 		}
 	}
 
 	scanner := rego.NewScanner(
-		types.SourceDockerfile,
 		rego.WithEmbeddedPolicies(false),
 		rego.WithPolicyDirs("."),
 	)
 	err := scanner.LoadPolicies(fsys)
 	require.Error(t, err)
+}
+
+func TestFallback_CheckWithoutAnnotation(t *testing.T) {
+	fsys := fstest.MapFS{
+		"check.rego": &fstest.MapFile{Data: []byte(`package builtin.test
+import data.some_func
+deny := some_func(input)
+`)},
+	}
+	scanner := rego.NewScanner(
+		rego.WithPolicyDirs("."),
+		rego.WithEmbeddedLibraries(false),
+		rego.WithPolicyFilesystem(fsys),
+	)
+	err := scanner.LoadPolicies(nil)
+	require.NoError(t, err)
+}
+
+func TestIsMinimumTrivyVersion(t *testing.T) {
+	testCases := []struct {
+		name                string
+		trivyVersion        string
+		MinimumTrivyVersion string
+		expectedResults     int
+		expectedErr         string
+	}{
+		{
+			name:                "trivy version is newer than the check version",
+			trivyVersion:        "1.2.3",
+			MinimumTrivyVersion: "1.2.0",
+			expectedResults:     1,
+		},
+		{
+			name:                "trivy version is older than the check version",
+			trivyVersion:        "1.2.0",
+			MinimumTrivyVersion: "1.2.3",
+			expectedResults:     0,
+		},
+		{
+			name:                "trivy version is equal to the check version",
+			trivyVersion:        "1.2.3",
+			MinimumTrivyVersion: "1.2.3",
+			expectedResults:     1,
+		},
+		{
+			name:                "check version is not a valid semver",
+			trivyVersion:        "1.2.3",
+			MinimumTrivyVersion: "invalid",
+			expectedResults:     0,
+		},
+		{
+			name:                "trivy version is not a valid semver", // if we cannot parse the version, we fail open to allow the check to run
+			trivyVersion:        "invalid",
+			MinimumTrivyVersion: "1.2.3",
+			expectedResults:     1,
+		},
+		{
+			name:                "check version is not set",
+			trivyVersion:        "1.2.3",
+			MinimumTrivyVersion: "",
+			expectedResults:     1,
+		},
+		{
+			name:                "trivy version is dev",
+			trivyVersion:        "dev",
+			MinimumTrivyVersion: "1.2.3",
+			expectedResults:     1,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			fsys := fstest.MapFS{
+				"check.rego": &fstest.MapFile{Data: fmt.Appendf(nil, `# METADATA
+# title: "dummy title"
+# description: "some description"
+# scope: package
+# schemas:
+# - input: schema["input"]
+# custom:
+#   minimum_trivy_version: "%s"
+package builtin.foo.ABC123
+deny {
+    input.evil
+}`, tc.MinimumTrivyVersion)},
+			}
+			scanner := rego.NewScanner(
+				rego.WithPolicyDirs("."),
+				rego.WithEmbeddedLibraries(false),
+				rego.WithEmbeddedPolicies(false),
+				rego.WithPolicyFilesystem(fsys),
+				rego.WithTrivyVersion(tc.trivyVersion),
+			)
+			err := scanner.LoadPolicies(nil)
+			require.NoError(t, err, tc.name)
+
+			results, err := scanner.ScanInput(t.Context(), types.SourceJSON, rego.Input{
+				Path: "/check.rego",
+				Contents: map[string]any{
+					"evil": true,
+				},
+				FS: fsys,
+			})
+
+			if tc.expectedErr != "" {
+				assert.ErrorContains(t, err, tc.expectedErr, tc.name)
+			} else {
+				require.NoError(t, err)
+				require.Len(t, results, tc.expectedResults, tc.name)
+			}
+		})
+	}
 }

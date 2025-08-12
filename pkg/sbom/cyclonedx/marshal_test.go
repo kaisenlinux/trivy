@@ -1,7 +1,6 @@
 package cyclonedx_test
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -15,7 +14,6 @@ import (
 	dtypes "github.com/aquasecurity/trivy-db/pkg/types"
 	"github.com/aquasecurity/trivy-db/pkg/vulnsrc/vulnerability"
 	"github.com/aquasecurity/trivy/pkg/clock"
-	"github.com/aquasecurity/trivy/pkg/fanal/artifact"
 	ftypes "github.com/aquasecurity/trivy/pkg/fanal/types"
 	"github.com/aquasecurity/trivy/pkg/report"
 	"github.com/aquasecurity/trivy/pkg/sbom/core"
@@ -91,7 +89,7 @@ func TestMarshaler_MarshalReport(t *testing.T) {
 			inputReport: types.Report{
 				SchemaVersion: report.SchemaVersion,
 				ArtifactName:  "rails:latest",
-				ArtifactType:  artifact.TypeContainerImage,
+				ArtifactType:  ftypes.TypeContainerImage,
 				Metadata: types.Metadata{
 					Size: 1024,
 					OS: &ftypes.OS{
@@ -289,6 +287,9 @@ func TestMarshaler_MarshalReport(t *testing.T) {
 								Name:    "trivy",
 								Group:   "aquasecurity",
 								Version: "dev",
+								Manufacturer: &cdx.OrganizationalEntity{
+									Name: "Aqua Security Software Ltd.",
+								},
 							},
 						},
 					},
@@ -511,7 +512,7 @@ func TestMarshaler_MarshalReport(t *testing.T) {
 						Licenses: &cdx.Licenses{
 							cdx.LicenseChoice{
 								License: &cdx.License{
-									Name: "GPLv3+",
+									ID: "GPL-3.0-or-later",
 								},
 							},
 						},
@@ -692,7 +693,7 @@ func TestMarshaler_MarshalReport(t *testing.T) {
 			inputReport: types.Report{
 				SchemaVersion: report.SchemaVersion,
 				ArtifactName:  "centos:latest",
-				ArtifactType:  artifact.TypeContainerImage,
+				ArtifactType:  ftypes.TypeContainerImage,
 				Metadata: types.Metadata{
 					Size: 1024,
 					OS: &ftypes.OS{
@@ -925,6 +926,9 @@ func TestMarshaler_MarshalReport(t *testing.T) {
 								Name:    "trivy",
 								Group:   "aquasecurity",
 								Version: "dev",
+								Manufacturer: &cdx.OrganizationalEntity{
+									Name: "Aqua Security Software Ltd.",
+								},
 							},
 						},
 					},
@@ -1028,7 +1032,7 @@ func TestMarshaler_MarshalReport(t *testing.T) {
 						Licenses: &cdx.Licenses{
 							cdx.LicenseChoice{
 								License: &cdx.License{
-									Name: "GPLv2+",
+									ID: "GPL-2.0-or-later",
 								},
 							},
 						},
@@ -1074,7 +1078,7 @@ func TestMarshaler_MarshalReport(t *testing.T) {
 						Licenses: &cdx.Licenses{
 							cdx.LicenseChoice{
 								License: &cdx.License{
-									Name: "GPLv2+",
+									ID: "GPL-2.0-or-later",
 								},
 							},
 						},
@@ -1229,7 +1233,7 @@ func TestMarshaler_MarshalReport(t *testing.T) {
 			inputReport: types.Report{
 				SchemaVersion: report.SchemaVersion,
 				ArtifactName:  "masahiro331/CVE-2021-41098",
-				ArtifactType:  artifact.TypeFilesystem,
+				ArtifactType:  ftypes.TypeFilesystem,
 				Results: types.Results{
 					{
 						Target: "Gemfile.lock",
@@ -1310,6 +1314,9 @@ func TestMarshaler_MarshalReport(t *testing.T) {
 								Name:    "trivy",
 								Group:   "aquasecurity",
 								Version: "dev",
+								Manufacturer: &cdx.OrganizationalEntity{
+									Name: "Aqua Security Software Ltd.",
+								},
 							},
 						},
 					},
@@ -1448,7 +1455,7 @@ func TestMarshaler_MarshalReport(t *testing.T) {
 			inputReport: types.Report{
 				SchemaVersion: report.SchemaVersion,
 				ArtifactName:  "./report.cdx.json",
-				ArtifactType:  artifact.TypeCycloneDX,
+				ArtifactType:  ftypes.TypeCycloneDX,
 				Results: types.Results{
 					{
 						Target: "Java",
@@ -1512,7 +1519,7 @@ func TestMarshaler_MarshalReport(t *testing.T) {
 									References: []string{
 										"https://access.redhat.com/security/cve/CVE-2022-42003",
 									},
-									PublishedDate:    lo.ToPtr(time.Date(2022, 10, 02, 05, 15, 0, 0, time.UTC)),
+									PublishedDate:    lo.ToPtr(time.Date(2022, 10, 2, 5, 15, 0, 0, time.UTC)),
 									LastModifiedDate: lo.ToPtr(time.Date(2022, 12, 20, 10, 15, 0, 0, time.UTC)),
 								},
 							},
@@ -1537,6 +1544,9 @@ func TestMarshaler_MarshalReport(t *testing.T) {
 								Name:    "trivy",
 								Group:   "aquasecurity",
 								Version: "dev",
+								Manufacturer: &cdx.OrganizationalEntity{
+									Name: "Aqua Security Software Ltd.",
+								},
 							},
 						},
 					},
@@ -1634,7 +1644,7 @@ func TestMarshaler_MarshalReport(t *testing.T) {
 			inputReport: types.Report{
 				SchemaVersion: report.SchemaVersion,
 				ArtifactName:  "CVE-2023-34468",
-				ArtifactType:  artifact.TypeFilesystem,
+				ArtifactType:  ftypes.TypeFilesystem,
 				Results: types.Results{
 					{
 						Target: "Java",
@@ -1719,7 +1729,7 @@ func TestMarshaler_MarshalReport(t *testing.T) {
 										"https://github.com/advisories/GHSA-xm2m-2q6h-22jw",
 									},
 									PublishedDate:    lo.ToPtr(time.Date(2023, 6, 12, 16, 15, 0, 0, time.UTC)),
-									LastModifiedDate: lo.ToPtr(time.Date(2023, 6, 21, 02, 20, 0, 0, time.UTC)),
+									LastModifiedDate: lo.ToPtr(time.Date(2023, 6, 21, 2, 20, 0, 0, time.UTC)),
 								},
 							},
 							{
@@ -1770,7 +1780,7 @@ func TestMarshaler_MarshalReport(t *testing.T) {
 										"https://github.com/advisories/GHSA-xm2m-2q6h-22jw",
 									},
 									PublishedDate:    lo.ToPtr(time.Date(2023, 6, 12, 16, 15, 0, 0, time.UTC)),
-									LastModifiedDate: lo.ToPtr(time.Date(2023, 6, 21, 02, 20, 0, 0, time.UTC)),
+									LastModifiedDate: lo.ToPtr(time.Date(2023, 6, 21, 2, 20, 0, 0, time.UTC)),
 								},
 							},
 						},
@@ -1793,6 +1803,9 @@ func TestMarshaler_MarshalReport(t *testing.T) {
 								Name:    "trivy",
 								Group:   "aquasecurity",
 								Version: "dev",
+								Manufacturer: &cdx.OrganizationalEntity{
+									Name: "Aqua Security Software Ltd.",
+								},
 							},
 						},
 					},
@@ -1935,7 +1948,7 @@ func TestMarshaler_MarshalReport(t *testing.T) {
 			inputReport: types.Report{
 				SchemaVersion: report.SchemaVersion,
 				ArtifactName:  "test-aggregate",
-				ArtifactType:  artifact.TypeRepository,
+				ArtifactType:  ftypes.TypeRepository,
 				Results: types.Results{
 					{
 						Target: "Node.js",
@@ -1980,6 +1993,9 @@ func TestMarshaler_MarshalReport(t *testing.T) {
 								Name:    "trivy",
 								Group:   "aquasecurity",
 								Version: "dev",
+								Manufacturer: &cdx.OrganizationalEntity{
+									Name: "Aqua Security Software Ltd.",
+								},
 							},
 						},
 					},
@@ -2005,7 +2021,7 @@ func TestMarshaler_MarshalReport(t *testing.T) {
 						Licenses: &cdx.Licenses{
 							cdx.LicenseChoice{
 								License: &cdx.License{
-									Name: "MIT",
+									ID: "MIT",
 								},
 							},
 						},
@@ -2049,7 +2065,7 @@ func TestMarshaler_MarshalReport(t *testing.T) {
 			inputReport: types.Report{
 				SchemaVersion: report.SchemaVersion,
 				ArtifactName:  "empty/path",
-				ArtifactType:  artifact.TypeFilesystem,
+				ArtifactType:  ftypes.TypeFilesystem,
 				Results:       types.Results{},
 			},
 			want: &cdx.BOM{
@@ -2068,6 +2084,9 @@ func TestMarshaler_MarshalReport(t *testing.T) {
 								Name:    "trivy",
 								Group:   "aquasecurity",
 								Version: "dev",
+								Manufacturer: &cdx.OrganizationalEntity{
+									Name: "Aqua Security Software Ltd.",
+								},
 							},
 						},
 					},
@@ -2097,12 +2116,107 @@ func TestMarshaler_MarshalReport(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx := clock.With(context.Background(), time.Date(2021, 8, 25, 12, 20, 30, 5, time.UTC))
+			ctx := clock.With(t.Context(), time.Date(2021, 8, 25, 12, 20, 30, 5, time.UTC))
 			uuid.SetFakeUUID(t, "3ff14136-e09f-4df9-80ea-%012d")
 
 			marshaler := cyclonedx.NewMarshaler("dev")
 			got, err := marshaler.MarshalReport(ctx, tt.inputReport)
 			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestMarshaler_Licenses(t *testing.T) {
+	tests := []struct {
+		name    string
+		license string
+		want    *cdx.Licenses
+	}{
+		{
+			name:    "SPDX ID",
+			license: "MIT",
+			want: &cdx.Licenses{
+				cdx.LicenseChoice{
+					License: &cdx.License{
+						ID: "MIT",
+					},
+				},
+			},
+		},
+		{
+			name:    "Unknown SPDX ID",
+			license: "no-spdx-id-license",
+			want: &cdx.Licenses{
+				cdx.LicenseChoice{
+					License: &cdx.License{
+						Name: "no-spdx-id-license",
+					},
+				},
+			},
+		},
+		{
+			name:    "text license",
+			license: "text://text of license",
+			want: &cdx.Licenses{
+				cdx.LicenseChoice{
+					License: &cdx.License{
+						Name: "text of license",
+					},
+				},
+			},
+		},
+		{
+			name:    "SPDX license with exception",
+			license: "AFL 2.0 with Linux-syscall-note",
+			want: &cdx.Licenses{
+				cdx.LicenseChoice{
+					Expression: "AFL-2.0 WITH Linux-syscall-note",
+				},
+			},
+		},
+		{
+			name:    "SPDX license with wrong exception",
+			license: "GPL-2.0-with-autoconf-exception+",
+			want: &cdx.Licenses{
+				cdx.LicenseChoice{
+					License: &cdx.License{
+						Name: "GPL-2.0-only WITH autoconf-exception+",
+					},
+				},
+			},
+		},
+		{
+			name:    "SPDX expression",
+			license: "GPL-3.0-only OR AFL 2.0 with Linux-syscall-note AND GPL-3.0-only",
+			want: &cdx.Licenses{
+				cdx.LicenseChoice{
+					Expression: "GPL-3.0-only OR AFL-2.0 WITH Linux-syscall-note AND GPL-3.0-only",
+				},
+			},
+		},
+		{
+			name:    "invalid SPDX expression",
+			license: "wrong-spdx-id OR GPL-3.0-only",
+			want: &cdx.Licenses{
+				cdx.LicenseChoice{
+					License: &cdx.License{
+						Name: "wrong-spdx-id OR GPL-3.0-only",
+					},
+				},
+			},
+		},
+		{
+			name:    "empty license",
+			license: "",
+			want:    nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			marshaler := cyclonedx.NewMarshaler("dev")
+			got := marshaler.Licenses([]string{tt.license})
 			assert.Equal(t, tt.want, got)
 		})
 	}

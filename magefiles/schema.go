@@ -5,7 +5,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"log"
 	"os"
 
@@ -45,7 +45,7 @@ func GenSchema() error {
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(schemaPath, data, 0600); err != nil {
+	if err := os.WriteFile(schemaPath, data, 0o600); err != nil {
 		return err
 	}
 	return nil
@@ -66,7 +66,7 @@ func VerifySchema() error {
 		return err
 	}
 	if !bytes.Equal(data, existing) {
-		return fmt.Errorf("schema is out of date:\n\nplease run 'mage schema:generate' and commit the changes\n")
+		return errors.New("schema is out of date:\n\nplease run 'mage schema:generate' and commit the changes\n")
 	}
 	return nil
 }

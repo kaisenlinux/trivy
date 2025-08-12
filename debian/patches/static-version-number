@@ -6,7 +6,7 @@ Author: Kevin Chevreuil - Kaisen <kaisen@kaisenlinux.org>
  package app
  
 -var ver = "dev"
-+var ver = "0.58.2"
++var ver = "0.65.0"
  
  func Version() string {
  	return ver

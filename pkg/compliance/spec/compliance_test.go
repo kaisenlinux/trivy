@@ -2,7 +2,7 @@ package spec_test
 
 import (
 	"path/filepath"
-	"sort"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -129,9 +129,7 @@ func TestComplianceSpec_Scanners(t *testing.T) {
 			if !tt.wantErr(t, err, "Scanners()") {
 				return
 			}
-			sort.Slice(got, func(i, j int) bool {
-				return got[i] < got[j]
-			}) // for consistency
+			slices.Sort(got) // for consistency
 			assert.Equalf(t, tt.want, got, "Scanners()")
 		})
 	}
@@ -271,7 +269,7 @@ func TestComplianceSpec_LoadFromDiskBundle(t *testing.T) {
 
 	t.Run("load user specified spec from disk fails", func(t *testing.T) {
 		_, err := spec.GetComplianceSpec("@doesnotexist", "does-not-matter")
-		assert.Contains(t, err.Error(), "error retrieving compliance spec from path")
+		require.ErrorContains(t, err, "error retrieving compliance spec from path")
 	})
 
 	t.Run("bundle does not exist", func(t *testing.T) {
@@ -288,6 +286,6 @@ func TestComplianceSpec_LoadFromDiskBundle(t *testing.T) {
 
 	t.Run("load spec yaml unmarshal failure", func(t *testing.T) {
 		_, err := spec.GetComplianceSpec("invalid", filepath.Join("testdata", "testcache"))
-		assert.Contains(t, err.Error(), "spec yaml decode error")
+		require.ErrorContains(t, err, "spec yaml decode error")
 	})
 }

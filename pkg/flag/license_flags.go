@@ -7,9 +7,10 @@ import (
 
 var (
 	LicenseFull = Flag[bool]{
-		Name:       "license-full",
-		ConfigName: "license.full",
-		Usage:      "eagerly look for licenses in source code headers and license files",
+		Name:          "license-full",
+		ConfigName:    "license.full",
+		Usage:         "eagerly look for licenses in source code headers and license files",
+		TelemetrySafe: true,
 	}
 	IgnoredLicenses = Flag[[]string]{
 		Name:       "ignored-licenses",
@@ -115,11 +116,7 @@ func (f *LicenseFlagGroup) Flags() []Flagger {
 	}
 }
 
-func (f *LicenseFlagGroup) ToOptions() (LicenseOptions, error) {
-	if err := parseFlags(f); err != nil {
-		return LicenseOptions{}, err
-	}
-
+func (f *LicenseFlagGroup) ToOptions(opts *Options) error {
 	licenseCategories := make(map[types.LicenseCategory][]string)
 	licenseCategories[types.CategoryForbidden] = f.LicenseForbidden.Value()
 	licenseCategories[types.CategoryRestricted] = f.LicenseRestricted.Value()
@@ -128,10 +125,11 @@ func (f *LicenseFlagGroup) ToOptions() (LicenseOptions, error) {
 	licenseCategories[types.CategoryPermissive] = f.LicensePermissive.Value()
 	licenseCategories[types.CategoryUnencumbered] = f.LicenseUnencumbered.Value()
 
-	return LicenseOptions{
+	opts.LicenseOptions = LicenseOptions{
 		LicenseFull:            f.LicenseFull.Value(),
 		IgnoredLicenses:        f.IgnoredLicenses.Value(),
 		LicenseConfidenceLevel: f.LicenseConfidenceLevel.Value(),
 		LicenseCategories:      licenseCategories,
-	}, nil
+	}
+	return nil
 }

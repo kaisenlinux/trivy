@@ -3,8 +3,10 @@ package executor
 import (
 	"context"
 	"fmt"
-	"sort"
+	"strconv"
+	"strings"
 
+	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/zclconf/go-cty/cty"
 
 	adapter "github.com/aquasecurity/trivy/pkg/iac/adapters/terraform"
@@ -22,6 +24,7 @@ type Executor struct {
 	logger         *log.Logger
 	resultsFilters []func(scan.Results) scan.Results
 	regoScanner    *rego.Scanner
+	scanRawConfig  bool
 }
 
 // New creates a new Executor
@@ -41,7 +44,8 @@ func (e *Executor) Execute(ctx context.Context, modules terraform.Modules, baseP
 	infra := adapter.Adapt(modules)
 	e.logger.Debug("Adapted module(s) into state data.", log.Int("count", len(modules)))
 
-	results, err := e.regoScanner.ScanInput(ctx, rego.Input{
+	e.logger.Debug("Scan state data")
+	results, err := e.regoScanner.ScanInput(ctx, types.SourceCloud, rego.Input{
 		Contents: infra.ToRego(),
 		Path:     basePath,
 	})
@@ -49,7 +53,21 @@ func (e *Executor) Execute(ctx context.Context, modules terraform.Modules, baseP
 		return nil, err
 	}
 
-	e.logger.Debug("Finished applying rules.")
+	if e.scanRawConfig {
+		e.logger.Debug("Scan raw Terraform data")
+		results2, err := e.regoScanner.ScanInput(ctx, types.SourceTerraformRaw, rego.Input{
+			Contents: terraform.ExportModules(modules),
+			Path:     basePath,
+		})
+		if err != nil {
+			e.logger.Error("Failed to scan raw Terraform data",
+				log.FilePath(basePath), log.Err(err))
+		} else {
+			results = append(results, results2...)
+		}
+	}
+
+	e.logger.Debug("Finished applying checks")
 
 	e.logger.Debug("Applying ignores...")
 	var ignores ignore.Rules
@@ -74,8 +92,92 @@ func (e *Executor) Execute(ctx context.Context, modules terraform.Modules, baseP
 
 	results = e.filterResults(results)
 
-	e.sortResults(results)
+	for i, res := range results {
+		if res.Status() != scan.StatusFailed {
+			continue
+		}
+
+		res.WithRenderedCause(e.renderCause(modules, res.Range()))
+		results[i] = res
+	}
+
 	return results, nil
+}
+
+func (e *Executor) renderCause(modules terraform.Modules, causeRng types.Range) scan.RenderedCause {
+	tfBlock := findBlockForCause(modules, causeRng)
+	if tfBlock == nil {
+		e.logger.Debug("No matching Terraform block found", log.String("cause_range", causeRng.String()))
+		return scan.RenderedCause{}
+	}
+
+	block := hclwrite.NewBlock(tfBlock.Type(), normalizeBlockLables(tfBlock))
+
+	if !writeBlock(tfBlock, block, causeRng) {
+		e.logger.Debug("No matching block attribute found", log.String("cause_range", causeRng.String()))
+		return scan.RenderedCause{}
+	}
+
+	f := hclwrite.NewEmptyFile()
+	f.Body().AppendBlock(block)
+
+	cause := string(hclwrite.Format(f.Bytes()))
+	cause = strings.TrimSuffix(cause, "\n")
+	return scan.RenderedCause{Raw: cause}
+}
+
+// normalizeBlockLables removes indexes and keys from labels.
+func normalizeBlockLables(block *terraform.Block) []string {
+	labels := block.Labels()
+	if block.IsExpanded() {
+		nameLabel := labels[len(labels)-1]
+		idx := strings.LastIndex(nameLabel, "[")
+		if idx != -1 {
+			labels[len(labels)-1] = nameLabel[:idx]
+		}
+	}
+
+	return labels
+}
+
+func writeBlock(tfBlock *terraform.Block, block *hclwrite.Block, causeRng types.Range) bool {
+	var found bool
+
+	for _, attr := range tfBlock.Attributes() {
+		if !attr.GetMetadata().Range().Covers(causeRng) || attr.IsLiteral() {
+			continue
+		}
+
+		value := attr.Value()
+		if !value.IsWhollyKnown() {
+			continue
+		}
+
+		block.Body().SetAttributeValue(attr.Name(), value)
+		found = true
+	}
+
+	for _, child := range tfBlock.AllBlocks() {
+		if child.GetMetadata().Range().Covers(causeRng) {
+			childBlock := hclwrite.NewBlock(child.Type(), nil)
+			if writeBlock(child, childBlock, causeRng) {
+				block.Body().AppendBlock(childBlock)
+				found = true
+			}
+		}
+	}
+
+	return found
+}
+
+func findBlockForCause(modules terraform.Modules, causeRng types.Range) *terraform.Block {
+	for _, block := range modules.GetBlocks() {
+		blockRng := block.GetMetadata().Range()
+		if blockRng.GetFilename() == causeRng.GetFilename() && blockRng.Includes(causeRng) {
+			return block
+		}
+	}
+	return nil
 }
 
 func (e *Executor) filterResults(results scan.Results) scan.Results {
@@ -90,19 +192,6 @@ func (e *Executor) filterResults(results scan.Results) scan.Results {
 	}
 
 	return results
-}
-
-func (e *Executor) sortResults(results []scan.Result) {
-	sort.Slice(results, func(i, j int) bool {
-		switch {
-		case results[i].Rule().LongID() < results[j].Rule().LongID():
-			return true
-		case results[i].Rule().LongID() > results[j].Rule().LongID():
-			return false
-		default:
-			return results[i].Range().String() > results[j].Range().String()
-		}
-	})
 }
 
 func ignoreByParams(params map[string]string, modules terraform.Modules, m *types.Metadata) bool {
@@ -123,13 +212,13 @@ func ignoreByParams(params map[string]string, modules terraform.Modules, m *type
 		case cty.Number:
 			bf := val.AsBigFloat()
 			f64, _ := bf.Float64()
-			comparableInt := fmt.Sprintf("%d", int(f64))
+			comparableInt := strconv.Itoa(int(f64))
 			comparableFloat := fmt.Sprintf("%f", f64)
 			if param != comparableInt && param != comparableFloat {
 				return false
 			}
 		case cty.Bool:
-			if fmt.Sprintf("%t", val.True()) != param {
+			if strconv.FormatBool(val.True()) != param {
 				return false
 			}
 		default:

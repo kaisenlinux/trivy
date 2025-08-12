@@ -111,6 +111,18 @@ References:
 - <https://gitlab.archlinux.org/archlinux/packaging/packages/trivy/-/blob/main/PKGBUILD>
 
 
+## OpenSUSE (Community)
+
+OpenSUSE Package Repository.
+
+```bash
+sudo zypper install trivy
+```
+
+References: 
+- <https://software.opensuse.org/package/trivy>
+
+
 ## MacPorts (Community)
 
 [MacPorts](https://www.macports.org) for macOS.
@@ -167,7 +179,7 @@ See their respective documentation for more information of how to install them a
 - [asdf](https://asdf-vm.com/guide/getting-started.html)
 - [mise](https://mise.jdx.dev/getting-started.html)
 
-The plugin used by both tools is developped [here](https://github.com/zufardhiyaulhaq/asdf-trivy)
+The plugin used by both tools is developed [here](https://github.com/zufardhiyaulhaq/asdf-trivy)
 
 
 === "asdf"

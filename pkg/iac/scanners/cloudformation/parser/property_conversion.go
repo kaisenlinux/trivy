@@ -2,11 +2,11 @@ package parser
 
 import (
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 
 	"github.com/aquasecurity/trivy/pkg/iac/scanners/cloudformation/cftypes"
+	"github.com/aquasecurity/trivy/pkg/log"
 )
 
 func (p *Property) IsConvertableTo(conversionType cftypes.CfType) bool {
@@ -26,7 +26,7 @@ func (p *Property) IsConvertableTo(conversionType cftypes.CfType) bool {
 }
 
 func (p *Property) isConvertableToString() bool {
-	switch p.Type() {
+	switch p.Type {
 	case cftypes.Map:
 		return false
 	case cftypes.List:
@@ -40,7 +40,7 @@ func (p *Property) isConvertableToString() bool {
 }
 
 func (p *Property) isConvertableToBool() bool {
-	switch p.Type() {
+	switch p.Type {
 	case cftypes.String:
 		return p.EqualTo("true", IgnoreCase) || p.EqualTo("false", IgnoreCase) ||
 			p.EqualTo("1", IgnoreCase) || p.EqualTo("0", IgnoreCase)
@@ -54,7 +54,7 @@ func (p *Property) isConvertableToBool() bool {
 }
 
 func (p *Property) isConvertableToInt() bool {
-	switch p.Type() {
+	switch p.Type {
 	case cftypes.String:
 		if _, err := strconv.Atoi(p.AsString()); err == nil {
 			return true
@@ -70,12 +70,16 @@ func (p *Property) ConvertTo(conversionType cftypes.CfType) *Property {
 		return nil
 	}
 
-	if p.Type() == conversionType {
+	if p.Type == conversionType {
 		return p
 	}
 
 	if !p.IsConvertableTo(conversionType) {
-		_, _ = fmt.Fprintf(os.Stderr, "property of type %s cannot be converted to %s\n", p.Type(), conversionType)
+		log.Debug("Failed to convert property",
+			log.String("from", string(p.Type)),
+			log.String("to", string(conversionType)),
+			log.Any("range", p.rng.String()),
+		)
 		return p
 	}
 	switch conversionType {
@@ -90,11 +94,11 @@ func (p *Property) ConvertTo(conversionType cftypes.CfType) *Property {
 }
 
 func (p *Property) convertToString() *Property {
-	switch p.Type() {
+	switch p.Type {
 	case cftypes.Int:
 		return p.deriveResolved(cftypes.String, strconv.Itoa(p.AsInt()))
 	case cftypes.Bool:
-		return p.deriveResolved(cftypes.String, fmt.Sprintf("%v", p.AsBool()))
+		return p.deriveResolved(cftypes.String, strconv.FormatBool(p.AsBool()))
 	case cftypes.List:
 		var parts []string
 		for _, property := range p.AsList() {
@@ -106,7 +110,7 @@ func (p *Property) convertToString() *Property {
 }
 
 func (p *Property) convertToBool() *Property {
-	switch p.Type() {
+	switch p.Type {
 	case cftypes.String:
 		if p.EqualTo("true", IgnoreCase) || p.EqualTo("1") {
 			return p.deriveResolved(cftypes.Bool, true)
@@ -126,8 +130,7 @@ func (p *Property) convertToBool() *Property {
 }
 
 func (p *Property) convertToInt() *Property {
-	//
-	switch p.Type() {
+	switch p.Type {
 	case cftypes.String:
 		if val, err := strconv.Atoi(p.AsString()); err == nil {
 			return p.deriveResolved(cftypes.Int, val)

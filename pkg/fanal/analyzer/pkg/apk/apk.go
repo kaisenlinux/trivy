@@ -20,15 +20,16 @@ import (
 	"github.com/aquasecurity/trivy/pkg/fanal/types"
 	"github.com/aquasecurity/trivy/pkg/licensing"
 	"github.com/aquasecurity/trivy/pkg/log"
+	"github.com/aquasecurity/trivy/pkg/set"
 )
 
 func init() {
 	analyzer.RegisterAnalyzer(newAlpinePkgAnalyzer())
 }
 
-const analyzerVersion = 2
+const analyzerVersion = 3
 
-var requiredFiles = []string{"lib/apk/db/installed"}
+var requiredFiles = []string{"lib/apk/db/installed", "usr/lib/apk/db/installed"}
 
 type alpinePkgAnalyzer struct{}
 
@@ -107,6 +108,8 @@ func (a alpinePkgAnalyzer) parseApkInfo(ctx context.Context, scanner *bufio.Scan
 			if d != "" {
 				pkg.Digest = d
 			}
+		case "m:":
+			pkg.Maintainer = line[2:]
 		}
 
 		if pkg.Name != "" && pkg.Version != "" {
@@ -147,7 +150,7 @@ func (a alpinePkgAnalyzer) parseLicense(line string) []string {
 }
 
 func (a alpinePkgAnalyzer) parseProvides(line, pkgID string, provides map[string]string) {
-	for _, p := range strings.Fields(line[2:]) {
+	for p := range strings.FieldsSeq(line[2:]) {
 		p = a.trimRequirement(p)
 
 		// Assume name ("P:") and version ("V:") are defined before provides ("p:")
@@ -185,13 +188,13 @@ func (a alpinePkgAnalyzer) consolidateDependencies(pkgs []types.Package, provide
 }
 
 func (a alpinePkgAnalyzer) uniquePkgs(pkgs []types.Package) (uniqPkgs []types.Package) {
-	uniq := make(map[string]struct{})
+	uniq := set.New[string]()
 	for _, pkg := range pkgs {
-		if _, ok := uniq[pkg.Name]; ok {
+		if uniq.Contains(pkg.Name) {
 			continue
 		}
 		uniqPkgs = append(uniqPkgs, pkg)
-		uniq[pkg.Name] = struct{}{}
+		uniq.Append(pkg.Name)
 	}
 	return uniqPkgs
 }
@@ -206,6 +209,11 @@ func (a alpinePkgAnalyzer) Type() analyzer.Type {
 
 func (a alpinePkgAnalyzer) Version() int {
 	return analyzerVersion
+}
+
+// StaticPaths returns a list of static file paths to analyze
+func (a alpinePkgAnalyzer) StaticPaths() []string {
+	return requiredFiles
 }
 
 // decodeChecksumLine decodes checksum line

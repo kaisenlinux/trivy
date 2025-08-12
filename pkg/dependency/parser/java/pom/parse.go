@@ -22,6 +22,8 @@ import (
 	"github.com/aquasecurity/trivy/pkg/dependency/parser/utils"
 	ftypes "github.com/aquasecurity/trivy/pkg/fanal/types"
 	"github.com/aquasecurity/trivy/pkg/log"
+	"github.com/aquasecurity/trivy/pkg/set"
+	xhttp "github.com/aquasecurity/trivy/pkg/x/http"
 	xio "github.com/aquasecurity/trivy/pkg/x/io"
 )
 
@@ -118,11 +120,11 @@ func (p *Parser) Parse(r xio.ReadSeekerAt) ([]ftypes.Package, []ftypes.Dependenc
 	rootArt := root.artifact()
 	rootArt.Relationship = ftypes.RelationshipRoot
 
-	return p.parseRoot(rootArt, make(map[string]struct{}))
+	return p.parseRoot(rootArt, set.New[string]())
 }
 
 // nolint: gocyclo
-func (p *Parser) parseRoot(root artifact, uniqModules map[string]struct{}) ([]ftypes.Package, []ftypes.Dependency, error) {
+func (p *Parser) parseRoot(root artifact, uniqModules set.Set[string]) ([]ftypes.Package, []ftypes.Dependency, error) {
 	// Prepare a queue for dependencies
 	queue := newArtifactQueue()
 
@@ -145,10 +147,10 @@ func (p *Parser) parseRoot(root artifact, uniqModules map[string]struct{}) ([]ft
 		// Modules should be handled separately so that they can have independent dependencies.
 		// It means multi-module allows for duplicate dependencies.
 		if art.Module {
-			if _, ok := uniqModules[art.String()]; ok {
+			if uniqModules.Contains(art.String()) {
 				continue
 			}
-			uniqModules[art.String()] = struct{}{}
+			uniqModules.Append(art.String())
 
 			modulePkgs, moduleDeps, err := p.parseRoot(art, uniqModules)
 			if err != nil {
@@ -251,7 +253,7 @@ func (p *Parser) parseRoot(root artifact, uniqModules map[string]struct{}) ([]ft
 		// `mvn` shows modules separately from the root package and does not show module nesting.
 		// So we can add all modules as dependencies of root package.
 		if art.Relationship == ftypes.RelationshipRoot {
-			dependsOn = append(dependsOn, lo.Keys(uniqModules)...)
+			dependsOn = append(dependsOn, uniqModules.Items()...)
 		}
 
 		sort.Strings(dependsOn)
@@ -340,13 +342,16 @@ type analysisResult struct {
 }
 
 type analysisOptions struct {
-	exclusions    map[string]struct{}
+	exclusions    set.Set[string]
 	depManagement []pomDependency // from the root POM
 }
 
 func (p *Parser) analyze(pom *pom, opts analysisOptions) (analysisResult, error) {
 	if pom.nil() {
 		return analysisResult{}, nil
+	}
+	if opts.exclusions == nil {
+		opts.exclusions = set.New[string]()
 	}
 	// Update remoteRepositories
 	pomReleaseRemoteRepos, pomSnapshotRemoteRepos := pom.repositories(p.servers)
@@ -408,23 +413,24 @@ func (p *Parser) resolveParent(pom *pom) error {
 }
 
 func (p *Parser) mergeDependencyManagements(depManagements ...[]pomDependency) []pomDependency {
-	uniq := make(map[string]struct{})
+	uniq := set.New[string]()
 	var depManagement []pomDependency
 	// The preceding argument takes precedence.
 	for _, dm := range depManagements {
 		for _, dep := range dm {
-			if _, ok := uniq[dep.Name()]; ok {
+			if uniq.Contains(dep.Name()) {
 				continue
 			}
 			depManagement = append(depManagement, dep)
-			uniq[dep.Name()] = struct{}{}
+			uniq.Append(dep.Name())
 		}
 	}
 	return depManagement
 }
 
 func (p *Parser) parseDependencies(deps []pomDependency, props map[string]string, depManagement []pomDependency,
-	opts analysisOptions) []artifact {
+	opts analysisOptions,
+) []artifact {
 	// Imported POMs often have no dependencies, so dependencyManagement resolution can be skipped.
 	if len(deps) == 0 {
 		return nil
@@ -492,19 +498,19 @@ func (p *Parser) mergeDependencies(child, parent []pomDependency) []pomDependenc
 	})
 }
 
-func (p *Parser) filterDependencies(artifacts []artifact, exclusions map[string]struct{}) []artifact {
+func (p *Parser) filterDependencies(artifacts []artifact, exclusions set.Set[string]) []artifact {
 	return lo.Filter(artifacts, func(art artifact, _ int) bool {
 		return !excludeDep(exclusions, art)
 	})
 }
 
-func excludeDep(exclusions map[string]struct{}, art artifact) bool {
-	if _, ok := exclusions[art.Name()]; ok {
+func excludeDep(exclusions set.Set[string], art artifact) bool {
+	if exclusions.Contains(art.Name()) {
 		return true
 	}
 	// Maven can use "*" in GroupID and ArtifactID fields to exclude dependencies
 	// https://maven.apache.org/pom.html#exclusions
-	for exlusion := range exclusions {
+	for exlusion := range exclusions.Iter() {
 		// exclusion format - "<groupID>:<artifactID>"
 		e := strings.Split(exlusion, ":")
 		if (e[0] == art.GroupID || e[0] == "*") && (e[1] == art.ArtifactID || e[1] == "*") {
@@ -545,28 +551,25 @@ func (p *Parser) retrieveParent(currentPath, relativePath string, target artifac
 	// Try relativePath
 	if relativePath != "" {
 		pom, err := p.tryRelativePath(target, currentPath, relativePath)
-		if err != nil {
-			errs = multierror.Append(errs, err)
-		} else {
+		if err == nil {
 			return pom, nil
 		}
+		errs = multierror.Append(errs, err)
 	}
 
 	// If not found, search the parent director
 	pom, err := p.tryRelativePath(target, currentPath, "../pom.xml")
-	if err != nil {
-		errs = multierror.Append(errs, err)
-	} else {
+	if err == nil {
 		return pom, nil
 	}
+	errs = multierror.Append(errs, err)
 
 	// If not found, search local/remote remoteRepositories
 	pom, err = p.tryRepository(target.GroupID, target.ArtifactID, target.Version.String())
-	if err != nil {
-		errs = multierror.Append(errs, err)
-	} else {
+	if err == nil {
 		return pom, nil
 	}
+	errs = multierror.Append(errs, err)
 
 	// Reaching here means the POM wasn't found
 	return nil, errs
@@ -636,6 +639,7 @@ func (p *Parser) openPom(filePath string) (*pom, error) {
 		content:  content,
 	}, nil
 }
+
 func (p *Parser) tryRepository(groupID, artifactID, version string) (*pom, error) {
 	if version == "" {
 		return nil, xerrors.Errorf("Version missing for %s:%s", groupID, artifactID)
@@ -739,7 +743,7 @@ func (p *Parser) fetchPomFileNameFromMavenMetadata(repo string, paths []string) 
 		return "", nil
 	}
 
-	client := &http.Client{}
+	client := xhttp.Client()
 	resp, err := client.Do(req)
 	if err != nil {
 		p.logger.Debug("Failed to fetch", log.String("url", req.URL.String()), log.Err(err))
@@ -773,7 +777,7 @@ func (p *Parser) fetchPOMFromRemoteRepository(repo string, paths []string) (*pom
 		return nil, nil
 	}
 
-	client := &http.Client{}
+	client := xhttp.Client()
 	resp, err := client.Do(req)
 	if err != nil {
 		p.logger.Debug("Failed to fetch", log.String("url", req.URL.String()), log.Err(err))
@@ -828,4 +832,12 @@ func packageID(name, version string) string {
 // cf. https://github.com/apache/maven/blob/259404701402230299fe05ee889ecdf1c9dae816/maven-artifact/src/main/java/org/apache/maven/artifact/DefaultArtifact.java#L482-L486
 func isSnapshot(ver string) bool {
 	return strings.HasSuffix(ver, "SNAPSHOT") || ver == "LATEST"
+}
+
+func isDirectory(path string) (bool, error) {
+	fileInfo, err := os.Stat(path)
+	if err != nil {
+		return false, err
+	}
+	return fileInfo.IsDir(), err
 }

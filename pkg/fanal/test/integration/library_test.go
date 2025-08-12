@@ -11,20 +11,20 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/aquasecurity/trivy/internal/testutil"
-	"github.com/aquasecurity/trivy/pkg/cache"
-	"github.com/aquasecurity/trivy/pkg/fanal/analyzer"
-	_ "github.com/aquasecurity/trivy/pkg/fanal/analyzer/all"
-	"github.com/aquasecurity/trivy/pkg/fanal/applier"
-	"github.com/aquasecurity/trivy/pkg/fanal/artifact"
-	aimage "github.com/aquasecurity/trivy/pkg/fanal/artifact/image"
-	_ "github.com/aquasecurity/trivy/pkg/fanal/handler/all"
-	"github.com/aquasecurity/trivy/pkg/fanal/image"
-	"github.com/aquasecurity/trivy/pkg/fanal/types"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/aquasecurity/trivy/internal/testutil"
+	"github.com/aquasecurity/trivy/pkg/cache"
+	"github.com/aquasecurity/trivy/pkg/fanal/analyzer"
+	"github.com/aquasecurity/trivy/pkg/fanal/applier"
+	"github.com/aquasecurity/trivy/pkg/fanal/artifact"
+	aimage "github.com/aquasecurity/trivy/pkg/fanal/artifact/image"
+	"github.com/aquasecurity/trivy/pkg/fanal/image"
+	"github.com/aquasecurity/trivy/pkg/fanal/types"
+
+	_ "github.com/aquasecurity/trivy/pkg/fanal/analyzer/all"
+	_ "github.com/aquasecurity/trivy/pkg/fanal/handler/all"
 	_ "modernc.org/sqlite"
 )
 
@@ -145,7 +145,7 @@ func TestFanal_Library_DockerMode(t *testing.T) {
 	cli := testutil.NewDockerClient(t)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx := context.Background()
+			ctx := t.Context()
 			d := t.TempDir()
 
 			c, err := cache.NewFSCache(d)
@@ -160,19 +160,19 @@ func TestFanal_Library_DockerMode(t *testing.T) {
 			require.NoError(t, err, tt.name)
 			defer cleanup()
 
-			ar, err := aimage.NewArtifact(img, c, artifact.Option{
-				// disable license checking in the test - in parallel it will fail because of resource requirement
-				DisabledAnalyzers: []analyzer.Type{
-					analyzer.TypeExecutable,
-					analyzer.TypeLicenseFile,
-				},
-			})
-			require.NoError(t, err)
-
-			applier := applier.NewApplier(c)
-
 			// run tests twice, one without cache and with cache
 			for i := 1; i <= 2; i++ {
+				ar, err := aimage.NewArtifact(img, c, artifact.Option{
+					// disable license checking in the test - in parallel it will fail because of resource requirement
+					DisabledAnalyzers: []analyzer.Type{
+						analyzer.TypeExecutable,
+						analyzer.TypeLicenseFile,
+					},
+				})
+				require.NoError(t, err)
+
+				applier := applier.NewApplier(c)
+
 				runChecks(t, ctx, ar, applier, tt)
 			}
 
@@ -186,7 +186,7 @@ func TestFanal_Library_TarMode(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			ctx := context.Background()
+			ctx := t.Context()
 			d := t.TempDir()
 
 			c, err := cache.NewFSCache(d)
@@ -237,7 +237,7 @@ func checkOSPackages(t *testing.T, detail types.ArtifactDetail, tc testCase) {
 	if *update {
 		b, err := json.MarshalIndent(detail.Packages, "", "  ")
 		require.NoError(t, err)
-		err = os.WriteFile(goldenFile, b, 0666)
+		err = os.WriteFile(goldenFile, b, 0o666)
 		require.NoError(t, err)
 		return
 	}
@@ -248,7 +248,7 @@ func checkOSPackages(t *testing.T, detail types.ArtifactDetail, tc testCase) {
 	err = json.Unmarshal(data, &expectedPkgs)
 	require.NoError(t, err)
 
-	require.Equal(t, len(expectedPkgs), len(detail.Packages), tc.name)
+	require.Len(t, expectedPkgs, len(detail.Packages), tc.name)
 	sort.Slice(expectedPkgs, func(i, j int) bool { return expectedPkgs[i].Name < expectedPkgs[j].Name })
 	sort.Sort(detail.Packages)
 
@@ -285,12 +285,12 @@ func checkLangPkgs(detail types.ArtifactDetail, t *testing.T, tc testCase) {
 		if *update {
 			b, err := json.MarshalIndent(detail.Applications, "", "  ")
 			require.NoError(t, err)
-			err = os.WriteFile(tc.wantApplicationFile, b, 0666)
+			err = os.WriteFile(tc.wantApplicationFile, b, 0o666)
 			require.NoError(t, err)
 			return
 		}
 
-		var wantApps []types.Application
+		var wantApps types.Applications
 		data, err := os.ReadFile(tc.wantApplicationFile)
 		require.NoError(t, err)
 		err = json.Unmarshal(data, &wantApps)
@@ -308,7 +308,7 @@ func checkPackageFromCommands(t *testing.T, detail types.ArtifactDetail, tc test
 			sort.Sort(types.Packages(detail.ImageConfig.Packages))
 			b, err := json.MarshalIndent(detail.ImageConfig.Packages, "", "  ")
 			require.NoError(t, err)
-			err = os.WriteFile(tc.wantPkgsFromCmds, b, 0666)
+			err = os.WriteFile(tc.wantPkgsFromCmds, b, 0o666)
 			require.NoError(t, err)
 			return
 		}

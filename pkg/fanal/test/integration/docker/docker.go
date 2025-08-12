@@ -42,7 +42,7 @@ func (c RegistryConfig) GetRegistryAuth() (string, error) {
 }
 
 func (c RegistryConfig) GetBasicAuthorization() string {
-	return fmt.Sprintf("Basic %s", base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", c.Username, c.Password))))
+	return fmt.Sprintf("Basic %s", base64.StdEncoding.EncodeToString(fmt.Appendf(nil, "%s:%s", c.Username, c.Password)))
 }
 
 type Docker struct {
@@ -84,7 +84,7 @@ func (d Docker) ReplicateImage(ctx context.Context, imageRef, imagePath string, 
 	defer testfile.Close()
 
 	// load image into docker engine
-	resp, err := d.cli.ImageLoad(ctx, testfile, true)
+	resp, err := d.cli.ImageLoad(ctx, testfile, client.ImageLoadWithQuiet(true))
 	if err != nil {
 		return err
 	}

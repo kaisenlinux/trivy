@@ -4,11 +4,12 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
+	"maps"
 	"path/filepath"
 	"strings"
 	"sync"
 
-	"github.com/open-policy-agent/opa/ast"
+	"github.com/open-policy-agent/opa/v1/ast"
 
 	checks "github.com/aquasecurity/trivy-checks"
 	"github.com/aquasecurity/trivy/pkg/iac/rules"
@@ -25,9 +26,7 @@ var LoadAndRegister = sync.OnceFunc(func() {
 	if err != nil {
 		panic(err)
 	}
-	for name, policy := range loadedLibs {
-		modules[name] = policy
-	}
+	maps.Copy(modules, loadedLibs)
 
 	RegisterRegoRules(modules)
 })
@@ -35,7 +34,7 @@ var LoadAndRegister = sync.OnceFunc(func() {
 func RegisterRegoRules(modules map[string]*ast.Module) {
 	ctx := context.TODO()
 
-	schemaSet, _, _ := BuildSchemaSetFromPolicies(modules, nil, nil, make(map[string][]byte))
+	schemaSet, _ := BuildSchemaSetFromPolicies(modules, nil, nil, make(map[string][]byte))
 
 	compiler := ast.NewCompiler().
 		WithSchemas(schemaSet).
@@ -49,7 +48,6 @@ func RegisterRegoRules(modules map[string]*ast.Module) {
 	}
 
 	retriever := NewMetadataRetriever(compiler)
-	regoCheckIDs := make(map[string]struct{})
 
 	for _, module := range modules {
 		metadata, err := retriever.RetrieveMetadata(ctx, module)
@@ -63,10 +61,6 @@ func RegisterRegoRules(modules map[string]*ast.Module) {
 				log.Warn("Check ID is empty", log.FilePath(module.Package.Location.File))
 			}
 			continue
-		}
-
-		if !metadata.Deprecated {
-			regoCheckIDs[metadata.AVDID] = struct{}{}
 		}
 
 		rules.Register(metadata.ToRule())
@@ -92,7 +86,7 @@ func LoadPoliciesFromDirs(target fs.FS, paths ...string) (map[string]*ast.Module
 				return nil
 			}
 
-			if strings.HasSuffix(filepath.Dir(filepath.ToSlash(path)), filepath.Join("advanced", "optional")) {
+			if isOptionalChecks(path) {
 				return fs.SkipDir
 			}
 
@@ -103,9 +97,7 @@ func LoadPoliciesFromDirs(target fs.FS, paths ...string) (map[string]*ast.Module
 			if err != nil {
 				return err
 			}
-			module, err := ast.ParseModuleWithOpts(path, string(data), ast.ParserOptions{
-				ProcessAnnotation: true,
-			})
+			module, err := ParseRegoModule(path, string(data))
 			if err != nil {
 				return fmt.Errorf("failed to parse Rego module: %w", err)
 			}
@@ -116,4 +108,8 @@ func LoadPoliciesFromDirs(target fs.FS, paths ...string) (map[string]*ast.Module
 		}
 	}
 	return modules, nil
+}
+
+func isOptionalChecks(path string) bool {
+	return strings.HasSuffix(filepath.Dir(filepath.ToSlash(path)), filepath.Join("advanced", "optional"))
 }

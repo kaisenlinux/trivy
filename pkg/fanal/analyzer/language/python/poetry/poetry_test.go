@@ -1,7 +1,6 @@
 package poetry
 
 import (
-	"context"
 	"os"
 	"testing"
 
@@ -123,6 +122,161 @@ func Test_poetryLibraryAnalyzer_Analyze(t *testing.T) {
 			},
 		},
 		{
+			name: "happy path with poetry v2",
+			dir:  "testdata/happy-v2",
+			want: &analyzer.AnalysisResult{
+				Applications: []types.Application{
+					{
+						Type:     types.Poetry,
+						FilePath: "poetry.lock",
+						Packages: types.Packages{
+							{
+								ID:           "atomicwrites@1.4.1",
+								Name:         "atomicwrites",
+								Version:      "1.4.1",
+								Indirect:     true,
+								Relationship: types.RelationshipIndirect,
+								Dev:          true,
+							},
+							{
+								ID:           "attrs@25.1.0",
+								Name:         "attrs",
+								Version:      "25.1.0",
+								Indirect:     true,
+								Relationship: types.RelationshipIndirect,
+								Dev:          true,
+							},
+							{
+								ID:           "click@8.1.8",
+								Name:         "click",
+								Version:      "8.1.8",
+								Indirect:     true,
+								Relationship: types.RelationshipIndirect,
+								DependsOn: []string{
+									"colorama@0.4.6",
+								},
+							},
+							{
+								ID:           "colorama@0.4.6",
+								Name:         "colorama",
+								Version:      "0.4.6",
+								Indirect:     true,
+								Relationship: types.RelationshipIndirect,
+							},
+							{
+								ID:           "flask@1.0.3",
+								Name:         "flask",
+								Version:      "1.0.3",
+								Relationship: types.RelationshipDirect,
+								DependsOn: []string{
+									"click@8.1.8",
+									"itsdangerous@2.2.0",
+									"jinja2@3.1.5",
+									"werkzeug@3.1.3",
+								},
+							},
+							{
+								ID:           "itsdangerous@2.2.0",
+								Name:         "itsdangerous",
+								Version:      "2.2.0",
+								Indirect:     true,
+								Relationship: types.RelationshipIndirect,
+							},
+							{
+								ID:           "jinja2@3.1.5",
+								Name:         "jinja2",
+								Version:      "3.1.5",
+								Indirect:     true,
+								Relationship: types.RelationshipIndirect,
+								DependsOn: []string{
+									"markupsafe@3.0.2",
+								},
+							},
+							{
+								ID:           "markupsafe@3.0.2",
+								Name:         "markupsafe",
+								Version:      "3.0.2",
+								Indirect:     true,
+								Relationship: types.RelationshipIndirect,
+							},
+							{
+								ID:           "more-itertools@10.6.0",
+								Name:         "more-itertools",
+								Version:      "10.6.0",
+								Indirect:     true,
+								Relationship: types.RelationshipIndirect,
+								Dev:          true,
+							},
+							{
+								ID:           "packaging@24.2",
+								Name:         "packaging",
+								Version:      "24.2",
+								Indirect:     true,
+								Relationship: types.RelationshipIndirect,
+								Dev:          true,
+							},
+							{
+								ID:           "pluggy@0.13.1",
+								Name:         "pluggy",
+								Version:      "0.13.1",
+								Relationship: types.RelationshipDirect,
+							},
+							{
+								ID:           "py@1.11.0",
+								Name:         "py",
+								Version:      "1.11.0",
+								Indirect:     true,
+								Relationship: types.RelationshipIndirect,
+								Dev:          true,
+							},
+							{
+								ID:           "pytest@5.4.3",
+								Name:         "pytest",
+								Version:      "5.4.3",
+								Relationship: types.RelationshipDirect,
+								DependsOn: []string{
+									"atomicwrites@1.4.1",
+									"attrs@25.1.0",
+									"colorama@0.4.6",
+									"more-itertools@10.6.0",
+									"packaging@24.2",
+									"pluggy@0.13.1",
+									"py@1.11.0",
+									"wcwidth@0.2.13",
+								},
+								Dev: true,
+							},
+							{
+								ID:           "ruff@0.8.3",
+								Name:         "ruff",
+								Version:      "0.8.3",
+								Relationship: types.RelationshipDirect,
+								Dev:          true,
+							},
+							{
+								ID:           "wcwidth@0.2.13",
+								Name:         "wcwidth",
+								Version:      "0.2.13",
+								Indirect:     true,
+								Relationship: types.RelationshipIndirect,
+								Dev:          true,
+							},
+							{
+								ID:           "werkzeug@3.1.3",
+								Name:         "werkzeug",
+								Version:      "3.1.3",
+								Indirect:     true,
+								Relationship: types.RelationshipIndirect,
+								DependsOn: []string{
+									"markupsafe@3.0.2",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
 			name: "no pyproject.toml",
 			dir:  "testdata/no-pyproject",
 			want: &analyzer.AnalysisResult{
@@ -187,10 +341,11 @@ func Test_poetryLibraryAnalyzer_Analyze(t *testing.T) {
 			// export PATH="/root/.local/bin:$PATH"
 			// poetry new groups && cd groups
 			// poetry add requests@2.32.3
+			// poetry add httpx@0.28.1 --extras socks
+			// poetry add --optional typing-inspect@0.9.0
 			// poetry add --group dev pytest@8.3.4
 			// poetry add --group lint ruff@0.8.3
-			// poetry add --optional typing-inspect@0.9.0
-			name: "skip deps from groups",
+			name: "with groups",
 			dir:  "testdata/with-groups",
 			want: &analyzer.AnalysisResult{
 				Applications: []types.Application{
@@ -198,6 +353,19 @@ func Test_poetryLibraryAnalyzer_Analyze(t *testing.T) {
 						Type:     types.Poetry,
 						FilePath: "poetry.lock",
 						Packages: types.Packages{
+							{
+								ID:           "anyio@4.7.0",
+								Name:         "anyio",
+								Version:      "4.7.0",
+								Indirect:     true,
+								Relationship: types.RelationshipIndirect,
+								DependsOn: []string{
+									"exceptiongroup@1.2.2",
+									"idna@3.10",
+									"sniffio@1.3.1",
+									"typing-extensions@4.12.2",
+								},
+							},
 							{
 								ID:           "certifi@2024.12.14",
 								Name:         "certifi",
@@ -213,6 +381,52 @@ func Test_poetryLibraryAnalyzer_Analyze(t *testing.T) {
 								Relationship: types.RelationshipIndirect,
 							},
 							{
+								ID:           "colorama@0.4.6",
+								Name:         "colorama",
+								Version:      "0.4.6",
+								Indirect:     true,
+								Relationship: types.RelationshipIndirect,
+								Dev:          true,
+							},
+							{
+								ID:           "exceptiongroup@1.2.2",
+								Name:         "exceptiongroup",
+								Version:      "1.2.2",
+								Indirect:     true,
+								Relationship: types.RelationshipIndirect,
+							},
+							{
+								ID:           "h11@0.14.0",
+								Name:         "h11",
+								Version:      "0.14.0",
+								Indirect:     true,
+								Relationship: types.RelationshipIndirect,
+							},
+							{
+								ID:           "httpcore@1.0.7",
+								Name:         "httpcore",
+								Version:      "1.0.7",
+								Indirect:     true,
+								Relationship: types.RelationshipIndirect,
+								DependsOn: []string{
+									"certifi@2024.12.14",
+									"h11@0.14.0",
+								},
+							},
+							{
+								ID:           "httpx@0.28.1",
+								Name:         "httpx",
+								Version:      "0.28.1",
+								Relationship: types.RelationshipDirect,
+								DependsOn: []string{
+									"anyio@4.7.0",
+									"certifi@2024.12.14",
+									"httpcore@1.0.7",
+									"idna@3.10",
+									"socksio@1.0.0",
+								},
+							},
+							{
 								ID:           "idna@3.10",
 								Name:         "idna",
 								Version:      "3.10",
@@ -220,11 +434,50 @@ func Test_poetryLibraryAnalyzer_Analyze(t *testing.T) {
 								Relationship: types.RelationshipIndirect,
 							},
 							{
+								ID:           "iniconfig@2.0.0",
+								Name:         "iniconfig",
+								Version:      "2.0.0",
+								Indirect:     true,
+								Relationship: types.RelationshipIndirect,
+								Dev:          true,
+							},
+							{
 								ID:           "mypy-extensions@1.0.0",
 								Name:         "mypy-extensions",
 								Version:      "1.0.0",
 								Indirect:     true,
 								Relationship: types.RelationshipIndirect,
+							},
+							{
+								ID:           "packaging@24.2",
+								Name:         "packaging",
+								Version:      "24.2",
+								Indirect:     true,
+								Relationship: types.RelationshipIndirect,
+								Dev:          true,
+							},
+							{
+								ID:           "pluggy@1.5.0",
+								Name:         "pluggy",
+								Version:      "1.5.0",
+								Indirect:     true,
+								Relationship: types.RelationshipIndirect,
+								Dev:          true,
+							},
+							{
+								ID:           "pytest@8.3.4",
+								Name:         "pytest",
+								Version:      "8.3.4",
+								Relationship: types.RelationshipDirect,
+								Dev:          true,
+								DependsOn: []string{
+									"colorama@0.4.6",
+									"exceptiongroup@1.2.2",
+									"iniconfig@2.0.0",
+									"packaging@24.2",
+									"pluggy@1.5.0",
+									"tomli@2.2.1",
+								},
 							},
 							{
 								ID:      "requests@2.32.3",
@@ -242,8 +495,30 @@ func Test_poetryLibraryAnalyzer_Analyze(t *testing.T) {
 								ID:           "ruff@0.8.3",
 								Name:         "ruff",
 								Version:      "0.8.3",
+								Relationship: types.RelationshipDirect,
+								Dev:          true,
+							},
+							{
+								ID:           "sniffio@1.3.1",
+								Name:         "sniffio",
+								Version:      "1.3.1",
 								Indirect:     true,
 								Relationship: types.RelationshipIndirect,
+							},
+							{
+								ID:           "socksio@1.0.0",
+								Name:         "socksio",
+								Version:      "1.0.0",
+								Indirect:     true,
+								Relationship: types.RelationshipIndirect,
+							},
+							{
+								ID:           "tomli@2.2.1",
+								Name:         "tomli",
+								Version:      "2.2.1",
+								Indirect:     true,
+								Relationship: types.RelationshipIndirect,
+								Dev:          true,
 							},
 							{
 								ID:           "typing-extensions@4.12.2",
@@ -281,7 +556,7 @@ func Test_poetryLibraryAnalyzer_Analyze(t *testing.T) {
 			a, err := newPoetryAnalyzer(analyzer.AnalyzerOptions{})
 			require.NoError(t, err)
 
-			got, err := a.PostAnalyze(context.Background(), analyzer.PostAnalysisInput{
+			got, err := a.PostAnalyze(t.Context(), analyzer.PostAnalysisInput{
 				FS: os.DirFS(tt.dir),
 			})
 

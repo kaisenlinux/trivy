@@ -170,6 +170,9 @@ func accumulateSeverityCounts(finding Resource) (map[string]int, map[string]int,
 			vCount[rv.Severity]++
 		}
 		for _, rv := range r.Misconfigurations {
+			if rv.Status == types.MisconfStatusPassed {
+				continue
+			}
 			mCount[rv.Severity]++
 		}
 		for _, rv := range r.Secrets {
@@ -196,7 +199,7 @@ func configureHeader(s SummaryWriter, t *table.Table, columnHeading []string) {
 			table.AlignLeft,
 			table.AlignLeft,
 		}
-		for i := 0; i < count; i++ {
+		for range count {
 			headerRow = append(headerRow, s.SeverityHeadings...)
 			colSpan = append(colSpan, sevCount)
 			headerAlignment = append(headerAlignment, table.AlignCenter)

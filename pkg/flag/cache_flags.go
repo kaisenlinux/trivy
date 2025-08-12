@@ -16,10 +16,11 @@ import (
 var (
 	// Deprecated
 	ClearCacheFlag = Flag[bool]{
-		Name:       "clear-cache",
-		ConfigName: "cache.clear",
-		Usage:      "clear image caches without scanning",
-		Removed:    `Use "trivy clean --scan-cache" instead`,
+		Name:          "clear-cache",
+		ConfigName:    "cache.clear",
+		Usage:         "clear image caches without scanning",
+		Removed:       `Use "trivy clean --scan-cache" instead`,
+		TelemetrySafe: true,
 	}
 	CacheBackendFlag = Flag[string]{
 		Name:       "cache-backend",
@@ -33,9 +34,10 @@ var (
 		Usage:      "cache TTL when using redis as cache backend",
 	}
 	RedisTLSFlag = Flag[bool]{
-		Name:       "redis-tls",
-		ConfigName: "cache.redis.tls",
-		Usage:      "enable redis TLS with public certificates, if using redis as cache backend",
+		Name:          "redis-tls",
+		ConfigName:    "cache.redis.tls",
+		Usage:         "enable redis TLS with public certificates, if using redis as cache backend",
+		TelemetrySafe: true,
 	}
 	RedisCACertFlag = Flag[string]{
 		Name:       "redis-ca",
@@ -106,17 +108,15 @@ func (fg *CacheFlagGroup) Flags() []Flagger {
 	}
 }
 
-func (fg *CacheFlagGroup) ToOptions() (CacheOptions, error) {
-	if err := parseFlags(fg); err != nil {
-		return CacheOptions{}, err
-	}
-
-	return CacheOptions{
+func (fg *CacheFlagGroup) ToOptions(opts *Options) error {
+	opts.CacheOptions = CacheOptions{
+		ClearCache:   fg.ClearCache.Value(),
 		CacheBackend: fg.CacheBackend.Value(),
 		CacheTTL:     fg.CacheTTL.Value(),
 		RedisTLS:     fg.RedisTLS.Value(),
 		RedisCACert:  fg.RedisCACert.Value(),
 		RedisCert:    fg.RedisCert.Value(),
 		RedisKey:     fg.RedisKey.Value(),
-	}, nil
+	}
+	return nil
 }

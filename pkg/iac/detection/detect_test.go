@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -84,6 +85,46 @@ func Test_Detection(t *testing.T) {
 			r:    strings.NewReader("some_var = \"some value\""),
 			expected: []FileType{
 				FileTypeTerraform,
+			},
+		},
+		{
+			name: "tofu, no reader",
+			path: "main.tofu",
+			expected: []FileType{
+				FileTypeTerraform,
+			},
+		},
+		{
+			name: "tofu, with reader",
+			path: "main.tofu",
+			r:    strings.NewReader("some file content"),
+			expected: []FileType{
+				FileTypeTerraform,
+			},
+		},
+		{
+			name: "tofu json, no reader",
+			path: "main.tofu.json",
+			expected: []FileType{
+				FileTypeTerraform,
+				FileTypeJSON,
+			},
+		},
+		{
+			name: "tofu json, with reader",
+			path: "main.tofu.json",
+			r: strings.NewReader(`
+{
+  "variable": {
+    "example": {
+      "default": "hello"
+    }
+  }
+}
+`),
+			expected: []FileType{
+				FileTypeTerraform,
+				FileTypeJSON,
 			},
 		},
 		{
@@ -420,22 +461,38 @@ rules:
 				FileTypeJSON,
 			},
 		},
+		{
+			name: "CreateUiDefinition",
+			path: "CreateUiDefinition.json",
+			r: strings.NewReader(`{
+  "$schema": "https://schema.management.azure.com/schemas/0.1.2-preview/CreateUIDefinition.MultiVm.json#",
+  "handler": "Microsoft.Azure.CreateUIDef",
+  "version": "0.1.2-preview",
+  "parameters": {
+    "config": {
+      "isWizard": false,
+      "basics": {}
+    },
+    "basics": [],
+    "steps": [],
+    "outputs": {},
+    "resourceTypes": []
+  }
+}`),
+			expected: []FileType{
+				FileTypeJSON,
+			},
+		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Run("GetTypes", func(t *testing.T) {
 				actualDetections := GetTypes(test.path, test.r)
-				assert.Equal(t, len(test.expected), len(actualDetections))
+				assert.Len(t, actualDetections, len(test.expected))
 				for _, expected := range test.expected {
 					resetReader(test.r)
-					var found bool
-					for _, actual := range actualDetections {
-						if actual == expected {
-							found = true
-							break
-						}
-					}
+					found := slices.Contains(actualDetections, expected)
 					assert.True(t, found, "%s should be detected", expected)
 				}
 			})
@@ -458,8 +515,8 @@ func BenchmarkIsType_SmallFile(b *testing.B) {
 	require.NoError(b, err)
 
 	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for b.Loop() {
 		_ = IsType(fmt.Sprintf("./testdata/%s", "small.file"), bytes.NewReader(data), FileTypeAzureARM)
 	}
 }
@@ -469,8 +526,8 @@ func BenchmarkIsType_BigFile(b *testing.B) {
 	require.NoError(b, err)
 
 	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for b.Loop() {
 		_ = IsType(fmt.Sprintf("./testdata/%s", "big.file"), bytes.NewReader(data), FileTypeAzureARM)
 	}
 }

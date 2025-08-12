@@ -2,8 +2,11 @@ package flag
 
 import (
 	"runtime"
+	"slices"
+	"strings"
 
 	"github.com/samber/lo"
+	"golang.org/x/xerrors"
 
 	ftypes "github.com/aquasecurity/trivy/pkg/fanal/types"
 	"github.com/aquasecurity/trivy/pkg/log"
@@ -24,9 +27,10 @@ var (
 		Usage:      "specify the files or glob patterns to skip",
 	}
 	OfflineScanFlag = Flag[bool]{
-		Name:       "offline-scan",
-		ConfigName: "scan.offline",
-		Usage:      "do not issue API requests to identify dependencies",
+		Name:          "offline-scan",
+		ConfigName:    "scan.offline",
+		Usage:         "do not issue API requests to identify dependencies",
+		TelemetrySafe: true,
 	}
 	ScannersFlag = Flag[[]string]{
 		Name:       "scanners",
@@ -62,7 +66,8 @@ var (
 				Deprecated: true, // --security-checks was renamed to --scanners
 			},
 		},
-		Usage: "comma-separated list of what security issues to detect",
+		Usage:         "comma-separated list of what security issues to detect",
+		TelemetrySafe: true,
 	}
 	FilePatternsFlag = Flag[[]string]{
 		Name:       "file-patterns",
@@ -70,17 +75,19 @@ var (
 		Usage:      "specify config file patterns",
 	}
 	SlowFlag = Flag[bool]{
-		Name:       "slow",
-		ConfigName: "scan.slow",
-		Default:    false,
-		Usage:      "scan over time with lower CPU and memory utilization",
-		Deprecated: `Use "--parallel 1" instead.`,
+		Name:          "slow",
+		ConfigName:    "scan.slow",
+		Default:       false,
+		Usage:         "scan over time with lower CPU and memory utilization",
+		Deprecated:    `Use "--parallel 1" instead.`,
+		TelemetrySafe: true,
 	}
 	ParallelFlag = Flag[int]{
-		Name:       "parallel",
-		ConfigName: "scan.parallel",
-		Default:    5,
-		Usage:      "number of goroutines enabled for parallel scanning, set 0 to auto-detect parallelism",
+		Name:          "parallel",
+		ConfigName:    "scan.parallel",
+		Default:       5,
+		Usage:         "number of goroutines enabled for parallel scanning, set 0 to auto-detect parallelism",
+		TelemetrySafe: true,
 	}
 	SBOMSourcesFlag = Flag[[]string]{
 		Name:       "sbom-sources",
@@ -109,6 +116,24 @@ var (
   - "precise": Prioritizes precise by minimizing false positives.
   - "comprehensive": Aims to detect more security findings at the cost of potential false positives.
 `,
+		TelemetrySafe: true,
+	}
+	DistroFlag = Flag[string]{
+		Name:          "distro",
+		ConfigName:    "scan.distro",
+		Usage:         "[EXPERIMENTAL] specify a distribution, <family>/<version>",
+		TelemetrySafe: true,
+	}
+	SkipVersionCheckFlag = Flag[bool]{
+		Name:          "skip-version-check",
+		ConfigName:    "scan.skip-version-check",
+		Usage:         "suppress notices about version updates and Trivy announcements",
+		TelemetrySafe: true,
+	}
+	DisableTelemetryFlag = Flag[bool]{
+		Name:       "disable-telemetry",
+		ConfigName: "scan.disable-telemetry",
+		Usage:      "disable sending anonymous usage data to Aqua",
 	}
 )
 
@@ -123,6 +148,9 @@ type ScanFlagGroup struct {
 	SBOMSources       *Flag[[]string]
 	RekorURL          *Flag[string]
 	DetectionPriority *Flag[string]
+	DistroFlag        *Flag[string]
+	SkipVersionCheck  *Flag[bool]
+	DisableTelemetry  *Flag[bool]
 }
 
 type ScanOptions struct {
@@ -136,6 +164,9 @@ type ScanOptions struct {
 	SBOMSources       []string
 	RekorURL          string
 	DetectionPriority ftypes.DetectionPriority
+	Distro            ftypes.OS
+	SkipVersionCheck  bool
+	DisableTelemetry  bool
 }
 
 func NewScanFlagGroup() *ScanFlagGroup {
@@ -150,6 +181,9 @@ func NewScanFlagGroup() *ScanFlagGroup {
 		RekorURL:          RekorURLFlag.Clone(),
 		Slow:              SlowFlag.Clone(),
 		DetectionPriority: DetectionPriority.Clone(),
+		DistroFlag:        DistroFlag.Clone(),
+		SkipVersionCheck:  SkipVersionCheckFlag.Clone(),
+		DisableTelemetry:  DisableTelemetryFlag.Clone(),
 	}
 }
 
@@ -169,17 +203,16 @@ func (f *ScanFlagGroup) Flags() []Flagger {
 		f.SBOMSources,
 		f.RekorURL,
 		f.DetectionPriority,
+		f.DistroFlag,
+		f.SkipVersionCheck,
+		f.DisableTelemetry,
 	}
 }
 
-func (f *ScanFlagGroup) ToOptions(args []string) (ScanOptions, error) {
-	if err := parseFlags(f); err != nil {
-		return ScanOptions{}, err
-	}
-
+func (f *ScanFlagGroup) ToOptions(opts *Options) error {
 	var target string
-	if len(args) == 1 {
-		target = args[0]
+	if len(opts.args) == 1 {
+		target = opts.args[0]
 	}
 
 	parallel := f.Parallel.Value()
@@ -188,7 +221,19 @@ func (f *ScanFlagGroup) ToOptions(args []string) (ScanOptions, error) {
 		parallel = runtime.NumCPU()
 	}
 
-	return ScanOptions{
+	var distro ftypes.OS
+	if f.DistroFlag != nil && f.DistroFlag.Value() != "" {
+		family, version, _ := strings.Cut(f.DistroFlag.Value(), "/")
+		if !slices.Contains(ftypes.OSTypes, ftypes.OSType(family)) {
+			return xerrors.Errorf("unknown OS family: %s, must be %q", family, ftypes.OSTypes)
+		}
+		distro = ftypes.OS{
+			Family: ftypes.OSType(family),
+			Name:   version,
+		}
+	}
+
+	opts.ScanOptions = ScanOptions{
 		Target:            target,
 		SkipDirs:          f.SkipDirs.Value(),
 		SkipFiles:         f.SkipFiles.Value(),
@@ -199,5 +244,9 @@ func (f *ScanFlagGroup) ToOptions(args []string) (ScanOptions, error) {
 		SBOMSources:       f.SBOMSources.Value(),
 		RekorURL:          f.RekorURL.Value(),
 		DetectionPriority: ftypes.DetectionPriority(f.DetectionPriority.Value()),
-	}, nil
+		Distro:            distro,
+		SkipVersionCheck:  f.SkipVersionCheck.Value(),
+		DisableTelemetry:  f.DisableTelemetry.Value(),
+	}
+	return nil
 }
